@@ -26,4 +26,26 @@
         changes to take effect.</string>
     <string name="fill_all_fields">Please fill in all fields</string>
     <string name="config_saved_toast">Configuration saved</string>
+
+    <!-- Media status reporting -->
+    <string name="media_listener_label">SleepyXposed Media Listener</string>
+    <string name="media_section_title">Media Status Reporting</string>
+    <string name="media_section_description">Optionally report the currently playing media (title
+        / artist) as a separate device on your Sleepy server.</string>
+    <string name="media_enable_reporting">Enable Media Reporting</string>
+    <string name="media_device_id_label">Media Device ID</string>
+    <string name="media_device_id_hint">e.g., phone-media</string>
+    <string name="media_show_name_label">Media Display Name</string>
+    <string name="media_show_name_hint">Name shown on Sleepy page for media status</string>
+    <string name="media_method_label">Acquisition Method</string>
+    <string name="media_method_auto">Auto (recommended based on device)</string>
+    <string name="media_method_system_hook">System Hook (via Xposed, no extra permission)</string>
+    <string name="media_method_notification_listener">Notification Listener (needs one-time
+        permission grant, best cross-ROM compatibility)</string>
+    <string name="media_method_dumpsys_shell">Dumpsys Shell (compatibility/debug fallback)</string>
+    <string name="media_recommendation_format">Detected: %1$s, %2$s\nRecommended method: %3$s\n%4$s</string>
+    <string name="media_grant_notification_access">Grant Notification Access (for Notification
+        Listener method)</string>
+    <string name="media_fill_required_fields">Please fill in the media device ID and display
+        name</string>
 </resources>

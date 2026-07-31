@@ -23,4 +23,22 @@
   <string name="config_saved">配置保存成功！\n\n请重启设备以使更改生效。</string>
   <string name="fill_all_fields">请填写所有字段</string>
   <string name="config_saved_toast">配置已保存</string>
+
+  <!-- 媒体状态上报 -->
+  <string name="media_listener_label">SleepyXposed 媒体监听</string>
+  <string name="media_section_title">媒体状态上报</string>
+  <string name="media_section_description">可选功能：将当前正在播放的媒体（标题/艺术家）作为独立设备上报到您的 Sleepy 服务器。</string>
+  <string name="media_enable_reporting">启用媒体状态上报</string>
+  <string name="media_device_id_label">媒体设备 ID</string>
+  <string name="media_device_id_hint">例如：phone-media</string>
+  <string name="media_show_name_label">媒体显示名称</string>
+  <string name="media_show_name_hint">在 Sleepy 页面显示的媒体状态名称</string>
+  <string name="media_method_label">获取方式</string>
+  <string name="media_method_auto">自动（根据设备推荐）</string>
+  <string name="media_method_system_hook">系统钩子（通过 Xposed 获取，无需额外授权）</string>
+  <string name="media_method_notification_listener">通知监听（需手动授权一次，跨 ROM 兼容性最好）</string>
+  <string name="media_method_dumpsys_shell">Dumpsys Shell（兼容性/调试备用方案）</string>
+  <string name="media_recommendation_format">检测结果：%1$s，%2$s\n推荐方式：%3$s\n%4$s</string>
+  <string name="media_grant_notification_access">授予通知访问权限（用于通知监听方式）</string>
+  <string name="media_fill_required_fields">请填写媒体设备 ID 和显示名称</string>
 </resources>

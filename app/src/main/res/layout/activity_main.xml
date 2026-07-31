@@ -115,6 +115,133 @@
                 android:layout_height="wrap_content" />
         </LinearLayout>
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#DDDDDD"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/media_section_title"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:paddingBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/media_section_description"
+            android:textSize="12sp"
+            android:textColor="#666666"
+            android:paddingBottom="12dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingBottom="12dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/media_enable_reporting"
+                android:textSize="14sp" />
+
+            <Switch
+                android:id="@+id/media_enabled_switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/media_device_id_label"
+            android:textSize="12sp"
+            android:paddingBottom="4dp" />
+
+        <EditText
+            android:id="@+id/media_device_id"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text"
+            android:singleLine="true"
+            android:paddingBottom="12dp"
+            android:hint="@string/media_device_id_hint" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/media_show_name_label"
+            android:textSize="12sp"
+            android:paddingBottom="4dp" />
+
+        <EditText
+            android:id="@+id/media_show_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text"
+            android:singleLine="true"
+            android:paddingBottom="12dp"
+            android:hint="@string/media_show_name_hint" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/media_method_label"
+            android:textSize="12sp"
+            android:paddingBottom="4dp" />
+
+        <RadioGroup
+            android:id="@+id/media_method_group"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="8dp">
+
+            <RadioButton
+                android:id="@+id/media_method_auto"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/media_method_auto" />
+
+            <RadioButton
+                android:id="@+id/media_method_system_hook"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/media_method_system_hook" />
+
+            <RadioButton
+                android:id="@+id/media_method_notification_listener"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/media_method_notification_listener" />
+
+            <RadioButton
+                android:id="@+id/media_method_dumpsys_shell"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/media_method_dumpsys_shell" />
+        </RadioGroup>
+
+        <TextView
+            android:id="@+id/media_recommendation_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="#1565C0"
+            android:paddingBottom="12dp" />
+
+        <Button
+            android:id="@+id/media_notification_permission_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/media_grant_notification_access"
+            android:paddingBottom="16dp" />
+
         <Button
             android:id="@+id/save_button"
             android:layout_width="match_parent"

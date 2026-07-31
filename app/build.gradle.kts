@@ -18,7 +18,7 @@ android {
 
     defaultConfig {
         applicationId = "com.rhencloud.sleepyxposed"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"

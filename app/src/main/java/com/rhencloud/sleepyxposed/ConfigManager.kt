@@ -11,7 +11,15 @@ data class SleepyConfig(
         val secret: String = "",
         val deviceId: String = "",
         val showName: String = "",
-        val enabled: Boolean = false
+        val enabled: Boolean = false,
+        /** Whether media playback status reporting is enabled. */
+        val mediaEnabled: Boolean = false,
+        /** Device ID used when reporting media playback status (independent of [deviceId]). */
+        val mediaDeviceId: String = "",
+        /** Display name used when reporting media playback status. */
+        val mediaShowName: String = "",
+        /** Name of the [MediaMethod] used to acquire media playback status. */
+        val mediaMethod: String = MediaMethod.AUTO.name
 )
 
 /** Configuration manager for loading and saving config.json */
@@ -23,6 +31,10 @@ object ConfigManager {
   private const val KEY_DEVICE_ID = "device_id"
   private const val KEY_SHOW_NAME = "show_name"
   private const val KEY_ENABLED = "enabled"
+  private const val KEY_MEDIA_ENABLED = "media_enabled"
+  private const val KEY_MEDIA_DEVICE_ID = "media_device_id"
+  private const val KEY_MEDIA_SHOW_NAME = "media_show_name"
+  private const val KEY_MEDIA_METHOD = "media_method"
   private const val FALLBACK_DIR = "SleepyXposed"
   private const val FALLBACK_FILE_NAME = "config.json"
 
@@ -37,7 +49,12 @@ object ConfigManager {
                     secret = pref.getString(KEY_SECRET, "") ?: "",
                     deviceId = pref.getString(KEY_DEVICE_ID, "") ?: "",
                     showName = pref.getString(KEY_SHOW_NAME, "") ?: "",
-                    enabled = pref.getBoolean(KEY_ENABLED, false)
+                    enabled = pref.getBoolean(KEY_ENABLED, false),
+                    mediaEnabled = pref.getBoolean(KEY_MEDIA_ENABLED, false),
+                    mediaDeviceId = pref.getString(KEY_MEDIA_DEVICE_ID, "") ?: "",
+                    mediaShowName = pref.getString(KEY_MEDIA_SHOW_NAME, "") ?: "",
+                    mediaMethod = pref.getString(KEY_MEDIA_METHOD, MediaMethod.AUTO.name)
+                                    ?: MediaMethod.AUTO.name
             )
 
     return if (config.hasRequiredFields()) config else loadConfigFromFallbackFile() ?: config
@@ -62,7 +79,18 @@ object ConfigManager {
                       secret = (getString.invoke(pref, KEY_SECRET, "") as? String) ?: "",
                       deviceId = (getString.invoke(pref, KEY_DEVICE_ID, "") as? String) ?: "",
                       showName = (getString.invoke(pref, KEY_SHOW_NAME, "") as? String) ?: "",
-                      enabled = (getBoolean.invoke(pref, KEY_ENABLED, false) as? Boolean) ?: false
+                      enabled = (getBoolean.invoke(pref, KEY_ENABLED, false) as? Boolean) ?: false,
+                      mediaEnabled =
+                              (getBoolean.invoke(pref, KEY_MEDIA_ENABLED, false) as? Boolean)
+                                      ?: false,
+                      mediaDeviceId =
+                              (getString.invoke(pref, KEY_MEDIA_DEVICE_ID, "") as? String) ?: "",
+                      mediaShowName =
+                              (getString.invoke(pref, KEY_MEDIA_SHOW_NAME, "") as? String) ?: "",
+                      mediaMethod =
+                              (getString.invoke(pref, KEY_MEDIA_METHOD, MediaMethod.AUTO.name)
+                                      as? String)
+                                      ?: MediaMethod.AUTO.name
               )
 
       if (config.hasRequiredFields()) {
@@ -88,6 +116,10 @@ object ConfigManager {
                       .putString(KEY_DEVICE_ID, config.deviceId)
                       .putString(KEY_SHOW_NAME, config.showName)
                       .putBoolean(KEY_ENABLED, config.enabled)
+                      .putBoolean(KEY_MEDIA_ENABLED, config.mediaEnabled)
+                      .putString(KEY_MEDIA_DEVICE_ID, config.mediaDeviceId)
+                      .putString(KEY_MEDIA_SHOW_NAME, config.mediaShowName)
+                      .putString(KEY_MEDIA_METHOD, config.mediaMethod)
                       .commit()
 
       makePrefsWorldReadable(prefContext)
@@ -119,6 +151,10 @@ object ConfigManager {
                 put(KEY_DEVICE_ID, config.deviceId)
                 put(KEY_SHOW_NAME, config.showName)
                 put(KEY_ENABLED, config.enabled)
+                put(KEY_MEDIA_ENABLED, config.mediaEnabled)
+                put(KEY_MEDIA_DEVICE_ID, config.mediaDeviceId)
+                put(KEY_MEDIA_SHOW_NAME, config.mediaShowName)
+                put(KEY_MEDIA_METHOD, config.mediaMethod)
               }
 
       file.writeText(json.toString())
@@ -142,7 +178,12 @@ object ConfigManager {
                         secret = json.optString(KEY_SECRET, ""),
                         deviceId = json.optString(KEY_DEVICE_ID, ""),
                         showName = json.optString(KEY_SHOW_NAME, ""),
-                        enabled = json.optBoolean(KEY_ENABLED, false)
+                        enabled = json.optBoolean(KEY_ENABLED, false),
+                        mediaEnabled = json.optBoolean(KEY_MEDIA_ENABLED, false),
+                        mediaDeviceId = json.optString(KEY_MEDIA_DEVICE_ID, ""),
+                        mediaShowName = json.optString(KEY_MEDIA_SHOW_NAME, ""),
+                        mediaMethod =
+                                json.optString(KEY_MEDIA_METHOD, MediaMethod.AUTO.name)
                 )
         if (config.hasRequiredFields()) {
           return config

@@ -40,24 +40,22 @@ object ConfigManager {
 
   /** Load configuration for module app process */
   fun loadConfig(context: Context): SleepyConfig {
-    val prefContext = getPrefContext(context)
-    @Suppress("DEPRECATION")
-    val pref = prefContext.getSharedPreferences(PREF_FILE_NAME, Context.MODE_WORLD_READABLE)
-    val config =
-            SleepyConfig(
-                    serverUrl = pref.getString(KEY_SERVER_URL, "") ?: "",
-                    secret = pref.getString(KEY_SECRET, "") ?: "",
-                    deviceId = pref.getString(KEY_DEVICE_ID, "") ?: "",
-                    showName = pref.getString(KEY_SHOW_NAME, "") ?: "",
-                    enabled = pref.getBoolean(KEY_ENABLED, false),
-                    mediaEnabled = pref.getBoolean(KEY_MEDIA_ENABLED, false),
-                    mediaDeviceId = pref.getString(KEY_MEDIA_DEVICE_ID, "") ?: "",
-                    mediaShowName = pref.getString(KEY_MEDIA_SHOW_NAME, "") ?: "",
-                    mediaMethod = pref.getString(KEY_MEDIA_METHOD, MediaMethod.AUTO.name)
-                                    ?: MediaMethod.AUTO.name
-            )
+    return try {
+      // Prefer device-protected prefs (available before unlock for system_server hooks),
+      // then credential-encrypted prefs, then external JSON fallback.
+      val de = readConfigFromPrefs(getDeviceProtectedContext(context), requireComplete = false)
+      if (de != null && de.hasRequiredFields()) return de
 
-    return if (config.hasRequiredFields()) config else loadConfigFromFallbackFile() ?: config
+      val ce = readConfigFromPrefs(context, requireComplete = false)
+      if (ce != null && ce.hasRequiredFields()) return ce
+
+      loadConfigFromFallbackFile(context)
+              ?: de
+              ?: ce
+              ?: SleepyConfig()
+    } catch (_: Exception) {
+      loadConfigFromFallbackFile(context) ?: SleepyConfig()
+    }
   }
 
   /** Load configuration for hooked process via XSharedPreferences */
@@ -98,18 +96,65 @@ object ConfigManager {
       } else {
         loadConfigFromFallbackFile() ?: config
       }
-    } catch (e: Exception) {
+    } catch (_: Exception) {
       loadConfigFromFallbackFile() ?: SleepyConfig()
     }
   }
 
   /** Save configuration in module app process */
   fun saveConfig(context: Context, config: SleepyConfig): Boolean {
+    // External JSON is always attempted so hooks can still read config if prefs fail.
+    val fallbackSaved = saveConfigToFallbackFile(context, config)
+
+    // MODE_WORLD_READABLE throws SecurityException on API 24+. Use MODE_PRIVATE and then
+    // best-effort chmod the XML so classic XSharedPreferences can still open it.
+    // Write to both DE (before-unlock / system_server) and CE (XSharedPreferences default path).
+    val deSaved = writeConfigToPrefs(getDeviceProtectedContext(context), config)
+    val ceSaved = writeConfigToPrefs(context, config)
+
+    return deSaved || ceSaved || fallbackSaved
+  }
+
+  private fun readConfigFromPrefs(
+          context: Context,
+          requireComplete: Boolean = true
+  ): SleepyConfig? {
     return try {
-      val prefContext = getPrefContext(context)
-      @Suppress("DEPRECATION")
-      val pref = prefContext.getSharedPreferences(PREF_FILE_NAME, Context.MODE_WORLD_READABLE)
-      val prefSaved =
+      val pref = context.getSharedPreferences(PREF_FILE_NAME, Context.MODE_PRIVATE)
+      // If the prefs file was never written, all values are defaults — treat as missing.
+      if (!pref.contains(KEY_SERVER_URL) &&
+                      !pref.contains(KEY_SECRET) &&
+                      !pref.contains(KEY_DEVICE_ID) &&
+                      !pref.contains(KEY_SHOW_NAME) &&
+                      !pref.contains(KEY_MEDIA_ENABLED)
+      ) {
+        return null
+      }
+
+      val config =
+              SleepyConfig(
+                      serverUrl = pref.getString(KEY_SERVER_URL, "") ?: "",
+                      secret = pref.getString(KEY_SECRET, "") ?: "",
+                      deviceId = pref.getString(KEY_DEVICE_ID, "") ?: "",
+                      showName = pref.getString(KEY_SHOW_NAME, "") ?: "",
+                      enabled = pref.getBoolean(KEY_ENABLED, false),
+                      mediaEnabled = pref.getBoolean(KEY_MEDIA_ENABLED, false),
+                      mediaDeviceId = pref.getString(KEY_MEDIA_DEVICE_ID, "") ?: "",
+                      mediaShowName = pref.getString(KEY_MEDIA_SHOW_NAME, "") ?: "",
+                      mediaMethod =
+                              pref.getString(KEY_MEDIA_METHOD, MediaMethod.AUTO.name)
+                                      ?: MediaMethod.AUTO.name
+              )
+      if (requireComplete && !config.hasRequiredFields()) null else config
+    } catch (_: Exception) {
+      null
+    }
+  }
+
+  private fun writeConfigToPrefs(context: Context, config: SleepyConfig): Boolean {
+    return try {
+      val pref = context.getSharedPreferences(PREF_FILE_NAME, Context.MODE_PRIVATE)
+      val saved =
               pref.edit()
                       .putString(KEY_SERVER_URL, config.serverUrl)
                       .putString(KEY_SECRET, config.secret)
@@ -121,13 +166,10 @@ object ConfigManager {
                       .putString(KEY_MEDIA_SHOW_NAME, config.mediaShowName)
                       .putString(KEY_MEDIA_METHOD, config.mediaMethod)
                       .commit()
-
-      makePrefsWorldReadable(prefContext)
-
-      val fallbackSaved = saveConfigToFallbackFile(context, config)
-      prefSaved || fallbackSaved
-    } catch (e: Exception) {
-      saveConfigToFallbackFile(context, config)
+      makePrefsWorldReadable(context)
+      saved
+    } catch (_: Exception) {
+      false
     }
   }
 
@@ -164,8 +206,14 @@ object ConfigManager {
     }
   }
 
-  private fun loadConfigFromFallbackFile(): SleepyConfig? {
-    for (file in getHookFallbackConfigCandidates()) {
+  private fun loadConfigFromFallbackFile(context: Context? = null): SleepyConfig? {
+    val candidates = mutableListOf<File>()
+    if (context != null) {
+      candidates.add(getAppFallbackConfigFile(context))
+    }
+    candidates.addAll(getHookFallbackConfigCandidates())
+
+    for (file in candidates.distinctBy { it.absolutePath }) {
       try {
         if (!file.exists()) {
           continue
@@ -238,11 +286,8 @@ object ConfigManager {
     return candidates
   }
 
-  private fun getPrefContext(context: Context): Context {
-    val deviceProtected = context.createDeviceProtectedStorageContext()
-    // Move existing prefs so the system_server can read them before unlock
-    deviceProtected.moveSharedPreferencesFrom(context, PREF_FILE_NAME)
-    return deviceProtected
+  private fun getDeviceProtectedContext(context: Context): Context {
+    return context.createDeviceProtectedStorageContext()
   }
 
   private fun makePrefsWorldReadable(context: Context) {

@@ -28,33 +28,31 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Initialize views
+        serverUrlEdit = findViewById(R.id.server_url)
+        secretEdit = findViewById(R.id.secret)
+        deviceIdEdit = findViewById(R.id.device_id)
+        showNameEdit = findViewById(R.id.show_name)
+        enabledSwitch = findViewById(R.id.enabled_switch)
+        saveButton = findViewById(R.id.save_button)
+        statusText = findViewById(R.id.status_text)
+
+        mediaEnabledSwitch = findViewById(R.id.media_enabled_switch)
+        mediaDeviceIdEdit = findViewById(R.id.media_device_id)
+        mediaShowNameEdit = findViewById(R.id.media_show_name)
+        mediaMethodGroup = findViewById(R.id.media_method_group)
+        mediaRecommendationText = findViewById(R.id.media_recommendation_text)
+        mediaNotificationPermissionButton = findViewById(R.id.media_notification_permission_button)
+
+        // Always wire buttons first so a load/recommendation failure cannot leave UI dead.
+        saveButton.setOnClickListener { saveConfiguration() }
+        mediaNotificationPermissionButton.setOnClickListener { openNotificationListenerSettings() }
+
         try {
-            serverUrlEdit = findViewById(R.id.server_url)
-            secretEdit = findViewById(R.id.secret)
-            deviceIdEdit = findViewById(R.id.device_id)
-            showNameEdit = findViewById(R.id.show_name)
-            enabledSwitch = findViewById(R.id.enabled_switch)
-            saveButton = findViewById(R.id.save_button)
-            statusText = findViewById(R.id.status_text)
-
-            mediaEnabledSwitch = findViewById(R.id.media_enabled_switch)
-            mediaDeviceIdEdit = findViewById(R.id.media_device_id)
-            mediaShowNameEdit = findViewById(R.id.media_show_name)
-            mediaMethodGroup = findViewById(R.id.media_method_group)
-            mediaRecommendationText = findViewById(R.id.media_recommendation_text)
-            mediaNotificationPermissionButton = findViewById(R.id.media_notification_permission_button)
-
-            // Load saved configuration from JSON file
             loadConfiguration()
             updateRecommendationText()
-
-            // Set up save button
-            saveButton.setOnClickListener { saveConfiguration() }
-
-            mediaNotificationPermissionButton.setOnClickListener { openNotificationListenerSettings() }
         } catch (e: Exception) {
-            Toast.makeText(this, "Error initializing UI: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Error loading configuration: ${e.message}", Toast.LENGTH_LONG)
+                .show()
             e.printStackTrace()
         }
     }

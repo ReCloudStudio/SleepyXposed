@@ -87,7 +87,7 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
     }
 
     private fun poll() {
-        val config = ConfigManager.loadConfigFromXSharedPreferences()
+        val config = ConfigManager.loadConfigFromXSharedPreferences(systemContext)
         if (!config.enabled) {
             return
         }
@@ -99,7 +99,9 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
             return
         }
         if (config.serverUrl.isBlank() || config.secret.isBlank()) {
-            logSkipOnce("server url / secret empty (config not loaded in system_server?)")
+            logSkipOnce(
+                "server url / secret empty — ${ConfigManager.describeLoadSources(systemContext)}"
+            )
             return
         }
         lastSkipReason = null

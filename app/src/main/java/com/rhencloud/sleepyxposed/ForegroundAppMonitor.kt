@@ -183,7 +183,7 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
 
     private fun loadConfiguration() {
         try {
-            val sleepyConfig = ConfigManager.loadConfigFromXSharedPreferences()
+            val sleepyConfig = ConfigManager.loadConfigFromXSharedPreferences(systemContext)
             cachedConfig =
                 Config(
                     url = sleepyConfig.serverUrl,
@@ -197,7 +197,9 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
                     "$TAG: Config loaded (enabled=${sleepyConfig.enabled}, url=${sleepyConfig.serverUrl})"
                 )
             } else {
-                log("$TAG: Config incomplete or empty after load (check module prefs / save UI)")
+                log(
+                    "$TAG: Config incomplete or empty after load — ${ConfigManager.describeLoadSources(systemContext)}"
+                )
             }
         } catch (e: Exception) {
             log("$TAG: Failed to load configuration: ${e.message}")

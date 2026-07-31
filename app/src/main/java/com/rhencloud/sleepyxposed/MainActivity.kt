@@ -116,11 +116,14 @@ class MainActivity : AppCompatActivity() {
                         mediaMethod = selectedMediaMethod().name
                 )
 
-        // Save to JSON file
         val success = ConfigManager.saveConfig(this, config)
 
         if (success) {
-            statusText.text = getString(R.string.config_saved)
+            // Include mirror path so user can verify system_server-readable config exists.
+            statusText.text =
+                getString(R.string.config_saved) +
+                    "\n\n" +
+                    ConfigManager.getConfigFilePath(this)
             statusText.visibility = View.VISIBLE
 
             Toast.makeText(this, getString(R.string.config_saved_toast), Toast.LENGTH_SHORT).show()

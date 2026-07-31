@@ -6,7 +6,7 @@
 -keep class de.robv.android.xposed.** { *; }
 
 # Keep our module class
--keep class com.rhencloud.sleepyxposed.** { *; }
+-keep class io.github.recloudstudio.sleepyxposed.** { *; }
 
 # If your project uses WebView with JS, uncomment the following
 # and specify the fully qualified class name to the JavaScript interface

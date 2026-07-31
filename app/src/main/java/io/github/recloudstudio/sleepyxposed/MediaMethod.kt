@@ -1,4 +1,4 @@
-package com.rhencloud.sleepyxposed
+package io.github.recloudstudio.sleepyxposed
 
 /**
  * Strategies for acquiring the current media playback status.

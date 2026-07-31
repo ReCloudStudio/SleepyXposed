@@ -1,4 +1,4 @@
-package com.rhencloud.sleepyxposed
+package io.github.recloudstudio.sleepyxposed
 
 import java.util.concurrent.TimeUnit
 import okhttp3.Callback

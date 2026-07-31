@@ -1,4 +1,4 @@
-package com.rhencloud.sleepyxposed
+package io.github.recloudstudio.sleepyxposed
 
 import android.content.ContentProvider
 import android.content.ContentValues
@@ -70,7 +70,7 @@ class ConfigContentProvider : ContentProvider() {
   }
 
   companion object {
-    const val AUTHORITY = "com.rhencloud.sleepyxposed.config"
+    const val AUTHORITY = "io.github.recloudstudio.sleepyxposed.config"
     val CONTENT_URI: Uri = Uri.parse("content://$AUTHORITY/config")
 
     val COLUMNS =

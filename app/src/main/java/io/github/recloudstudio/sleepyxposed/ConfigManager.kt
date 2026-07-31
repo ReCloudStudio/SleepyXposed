@@ -1,4 +1,4 @@
-package com.rhencloud.sleepyxposed
+package io.github.recloudstudio.sleepyxposed
 
 import android.content.Context
 import android.os.Environment
@@ -25,7 +25,7 @@ data class SleepyConfig(
 /** Configuration manager for loading and saving config across app + system_server. */
 object ConfigManager {
   private const val PREF_FILE_NAME = "sleepy_config"
-  private const val MODULE_PACKAGE_NAME = "com.rhencloud.sleepyxposed"
+  private const val MODULE_PACKAGE_NAME = "io.github.recloudstudio.sleepyxposed"
   private const val KEY_SERVER_URL = "server_url"
   private const val KEY_SECRET = "secret"
   private const val KEY_DEVICE_ID = "device_id"

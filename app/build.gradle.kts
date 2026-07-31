@@ -13,15 +13,15 @@ val keystoreProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.rhencloud.sleepyxposed"
+    namespace = "io.github.recloudstudio.sleepyxposed"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.rhencloud.sleepyxposed"
+        applicationId = "io.github.recloudstudio.sleepyxposed"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
     }
 
     signingConfigs {

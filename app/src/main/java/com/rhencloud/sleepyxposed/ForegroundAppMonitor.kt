@@ -111,26 +111,44 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
 
         val completeResume: Method = activityRecordClass.getDeclaredMethod("completeResumeLocked")
         completeResume.isAccessible = true
-        ModuleMain.instance?.hook(completeResume)?.intercept { chain ->
+        val module = ModuleMain.instance
+        if (module == null) {
+            log("$TAG: ModuleMain.instance is null, cannot install hook")
+            return
+        }
+
+        module.hook(completeResume).intercept { chain ->
             val result = chain.proceed()
             try {
-                val activityRecord = chain.thisObject
-                val packageName = getField(activityRecord, "packageName") as? String
-                val activityInfo = getField(activityRecord, "info")
-                val activityName = activityInfo?.let { getField(it, "name") as? String }
+                val activityRecord = chain.thisObject ?: return@intercept result
 
-                if (packageName != null) {
-                    currentForegroundPackage = packageName
-                    currentForegroundActivity = activityName
+                // packageName is enough to report; activity name is best-effort only.
+                // Legacy XposedHelpers.getObjectField walked superclasses; plain
+                // getDeclaredField does not (ActivityInfo.name lives on ComponentInfo).
+                val packageName = getFieldOrNull(activityRecord, "packageName") as? String
+                if (packageName.isNullOrBlank()) {
+                    return@intercept result
+                }
 
-                    if (packageName != lastForegroundPackage) {
-                        lastForegroundPackage = packageName
-                        val appName = systemContext?.let { getAppDisplayName(it, packageName) } ?: packageName
-                        val componentName =
-                            if (activityName != null) "$packageName/$activityName/$appName" else packageName
-                        log("$TAG: Foreground app switched to: $componentName")
-                        executeCustomOperations(packageName)
-                    }
+                val activityName =
+                    runCatching {
+                            val activityInfo = getFieldOrNull(activityRecord, "info")
+                            activityInfo?.let { getFieldOrNull(it, "name") as? String }
+                        }
+                        .getOrNull()
+
+                currentForegroundPackage = packageName
+                currentForegroundActivity = activityName
+
+                if (packageName != lastForegroundPackage) {
+                    lastForegroundPackage = packageName
+                    val appName =
+                        systemContext?.let { getAppDisplayName(it, packageName) } ?: packageName
+                    val componentName =
+                        if (activityName != null) "$packageName/$activityName/$appName"
+                        else packageName
+                    log("$TAG: Foreground app switched to: $componentName")
+                    executeCustomOperations(packageName)
                 }
             } catch (e: Throwable) {
                 log("$TAG: Error in hook: ${e.message}")
@@ -141,10 +159,26 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
         log("$TAG: Successfully hooked into ActivityRecord.completeResumeLocked")
     }
 
-    private fun getField(target: Any, name: String): Any? {
-        val field = target.javaClass.getDeclaredField(name)
-        field.isAccessible = true
-        return field.get(target)
+    /**
+     * Read an instance field by name, walking the superclass chain.
+     *
+     * Equivalent of legacy [de.robv.android.xposed.XposedHelpers.getObjectField]:
+     * [Class.getDeclaredField] only searches the exact class, so inherited fields
+     * such as [android.content.pm.ComponentInfo.name] on [android.content.pm.ActivityInfo]
+     * would otherwise throw NoSuchFieldException.
+     */
+    private fun getFieldOrNull(target: Any, name: String): Any? {
+        var clazz: Class<*>? = target.javaClass
+        while (clazz != null) {
+            try {
+                val field = clazz.getDeclaredField(name)
+                field.isAccessible = true
+                return field.get(target)
+            } catch (_: NoSuchFieldException) {
+                clazz = clazz.superclass
+            }
+        }
+        return null
     }
 
     private fun loadConfiguration() {
@@ -158,6 +192,13 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
                     showName = sleepyConfig.showName,
                     enabled = sleepyConfig.enabled
                 )
+            if (isConfigUsable(cachedConfig)) {
+                log(
+                    "$TAG: Config loaded (enabled=${sleepyConfig.enabled}, url=${sleepyConfig.serverUrl})"
+                )
+            } else {
+                log("$TAG: Config incomplete or empty after load (check module prefs / save UI)")
+            }
         } catch (e: Exception) {
             log("$TAG: Failed to load configuration: ${e.message}")
         }

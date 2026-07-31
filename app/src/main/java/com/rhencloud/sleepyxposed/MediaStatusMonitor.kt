@@ -44,6 +44,7 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
     private var systemContext: Context? = null
     private var pollRunnable: Runnable? = null
     private var lastStatus: String? = null
+    private var lastSkipReason: String? = null
 
     fun initializeForSystemServer(classLoader: ClassLoader) {
         log("$TAG: Initializing media status monitor...")
@@ -87,9 +88,21 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
 
     private fun poll() {
         val config = ConfigManager.loadConfigFromXSharedPreferences()
-        if (!config.enabled || !config.mediaEnabled) return
-        if (config.mediaDeviceId.isBlank() || config.mediaShowName.isBlank()) return
-        if (config.serverUrl.isBlank() || config.secret.isBlank()) return
+        if (!config.enabled) {
+            return
+        }
+        if (!config.mediaEnabled) {
+            return
+        }
+        if (config.mediaDeviceId.isBlank() || config.mediaShowName.isBlank()) {
+            logSkipOnce("media device id / show name empty")
+            return
+        }
+        if (config.serverUrl.isBlank() || config.secret.isBlank()) {
+            logSkipOnce("server url / secret empty (config not loaded in system_server?)")
+            return
+        }
+        lastSkipReason = null
 
         val configuredMethod = MediaMethod.fromString(config.mediaMethod)
         val resolvedMethod = RomDetector.resolveMethod(systemContext, configuredMethod)
@@ -114,6 +127,7 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
 
         if (status == lastStatus) return
         lastStatus = status
+        log("$TAG: Media status changed via $resolvedMethod: $status")
 
         try {
             SleepyApiClient.sendDeviceStatus(
@@ -141,6 +155,12 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
         } catch (e: Exception) {
             log("$TAG: Error sending media status: ${e.message}")
         }
+    }
+
+    private fun logSkipOnce(reason: String) {
+        if (lastSkipReason == reason) return
+        lastSkipReason = reason
+        log("$TAG: Media report skipped: $reason")
     }
 
     private fun readViaMediaSessionManager(): MediaInfo? {

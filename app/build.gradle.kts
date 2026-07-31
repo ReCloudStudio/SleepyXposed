@@ -73,6 +73,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     compileOnly("io.github.libxposed:api:101.0.1")
+    compileOnly("de.robv.android.xposed:api:82")
 
     testImplementation("junit:junit:4.13.2")
 }

@@ -26,6 +26,30 @@
             </intent-filter>
         </activity>
 
+        <!-- Notification listener used for the media-status "Notification Listener" method -->
+        <service
+            android:name=".MediaListenerService"
+            android:label="@string/media_listener_label"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!--
+          Exposes config to system_server. Private SharedPreferences are SELinux-blocked from
+          system_server under modern ROMs / libxposed API 101; the provider is queried with the
+          module app identity so prefs load correctly. Only system UID may read (enforced in code).
+        -->
+        <provider
+            android:name=".ConfigContentProvider"
+            android:authorities="com.rhencloud.sleepyxposed.config"
+            android:exported="true"
+            android:enabled="true"
+            android:directBootAware="true"
+            android:grantUriPermissions="false" />
+
         <!-- Xposed Module Metadata -->
         <meta-data
             android:name="xposedmodule"

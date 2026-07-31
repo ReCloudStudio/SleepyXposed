@@ -26,5 +26,13 @@ class ModuleMain : XposedModule() {
         } catch (t: Throwable) {
             log(Log.ERROR, TAG, "Modern API bootstrap failed", t)
         }
+
+        try {
+            MediaStatusMonitor { message -> log(Log.INFO, TAG, message) }
+                .initializeForSystemServer(param.classLoader)
+            log(Log.INFO, TAG, "Media status monitor bootstrap succeeded")
+        } catch (t: Throwable) {
+            log(Log.ERROR, TAG, "Media status monitor bootstrap failed", t)
+        }
     }
 }

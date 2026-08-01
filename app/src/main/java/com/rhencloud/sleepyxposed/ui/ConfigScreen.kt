@@ -130,6 +130,11 @@ fun ConfigScreen() {
 
         SectionTitle(stringResource(R.string.server_configuration))
         SettingsCard {
+            SwitchRow(
+                title = stringResource(R.string.enable_reporting),
+                checked = enabled,
+                onCheckedChange = { enabled = it }
+            )
             Field(
                 value = serverUrl,
                 onValueChange = { serverUrl = it },
@@ -151,11 +156,6 @@ fun ConfigScreen() {
                 value = showName,
                 onValueChange = { showName = it },
                 label = stringResource(R.string.display_name_label)
-            )
-            SwitchRow(
-                title = stringResource(R.string.enable_reporting),
-                checked = enabled,
-                onCheckedChange = { enabled = it }
             )
         }
 

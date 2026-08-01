@@ -48,6 +48,15 @@ object HookHeartbeat {
     /**
      * Call from system_server-side code (via [systemContext]) whenever a hook demonstrably
      * executes. Cheap: throttled, and the actual write happens in the app process via IPC.
+     *
+     * Opportunistically piggybacks the *actual* running framework's name/version (read straight
+     * from the libxposed `XposedInterface` this module is attached to, via [ModuleMain.instance])
+     * onto the same call. An earlier version pushed framework info exactly once, right when the
+     * hook first bootstraps — but if that single attempt lost the race (e.g. ran before the
+     * device's first unlock, when the app process/private storage may not be available yet), it
+     * was never retried and stayed stuck on "unknown" until the next reboot, unlike the heartbeat
+     * itself which self-heals because it's retried on every foreground switch / poll. Sending it
+     * with every (throttled) ping gives it the same automatic retry behavior.
      */
     fun ping(systemContext: Context?, detail: String = "") {
         if (systemContext == null) return
@@ -56,11 +65,26 @@ object HookHeartbeat {
         lastPingAtElapsed = now
 
         try {
+            val extras = Bundle()
+            try {
+                val module = ModuleMain.instance
+                if (module != null) {
+                    extras.putString(ConfigContentProvider.EXTRA_FRAMEWORK_NAME, module.getFrameworkName())
+                    extras.putString(ConfigContentProvider.EXTRA_FRAMEWORK_VERSION, module.getFrameworkVersion())
+                    extras.putLong(
+                        ConfigContentProvider.EXTRA_FRAMEWORK_VERSION_CODE,
+                        module.getFrameworkVersionCode()
+                    )
+                }
+            } catch (_: Exception) {
+                // Framework info is a bonus; the heartbeat ping itself still proceeds without it.
+            }
+
             systemContext.contentResolver.call(
                 ConfigContentProvider.CONTENT_URI,
                 ConfigContentProvider.METHOD_HEARTBEAT,
                 detail,
-                null
+                extras
             )
         } catch (_: Exception) {
             // Best-effort; UI simply keeps showing "not detected" if this never lands.
@@ -68,7 +92,7 @@ object HookHeartbeat {
     }
 
     /** Called by [ConfigContentProvider.call] inside the app process — plain private prefs. */
-    fun recordPing(appContext: Context, detail: String) {
+    fun recordPing(appContext: Context, detail: String, extras: Bundle? = null) {
         try {
             appContext
                 .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -79,33 +103,15 @@ object HookHeartbeat {
         } catch (_: Exception) {
             // Best-effort.
         }
-    }
 
-    /**
-     * Call from system_server-side code once, right after obtaining a system [Context] — pushes
-     * the *actual* running framework's name/version, read straight from the libxposed
-     * `XposedInterface` this module is attached to (`getFrameworkName()` / `getFrameworkVersion()`
-     * / `getFrameworkVersionCode()`). This is the authoritative source: it doesn't depend on
-     * guessing from whether some standalone manager app happens to be installed, which most
-     * people never bother with and which package-visibility filtering (API 30+) makes unreliable
-     * to probe for anyway.
-     */
-    fun pushFrameworkInfo(systemContext: Context, name: String, version: String, versionCode: Long) {
-        try {
-            val extras =
-                Bundle().apply {
-                    putString(ConfigContentProvider.EXTRA_FRAMEWORK_NAME, name)
-                    putString(ConfigContentProvider.EXTRA_FRAMEWORK_VERSION, version)
-                    putLong(ConfigContentProvider.EXTRA_FRAMEWORK_VERSION_CODE, versionCode)
-                }
-            systemContext.contentResolver.call(
-                ConfigContentProvider.CONTENT_URI,
-                ConfigContentProvider.METHOD_FRAMEWORK_INFO,
-                null,
-                extras
+        val name = extras?.getString(ConfigContentProvider.EXTRA_FRAMEWORK_NAME)
+        if (!name.isNullOrBlank()) {
+            recordFrameworkInfo(
+                appContext,
+                name = name,
+                version = extras.getString(ConfigContentProvider.EXTRA_FRAMEWORK_VERSION).orEmpty(),
+                versionCode = extras.getLong(ConfigContentProvider.EXTRA_FRAMEWORK_VERSION_CODE, 0L)
             )
-        } catch (_: Exception) {
-            // Best-effort; UI falls back to "unknown" if this never lands.
         }
     }
 

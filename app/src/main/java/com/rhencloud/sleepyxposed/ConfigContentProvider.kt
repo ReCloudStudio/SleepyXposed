@@ -58,25 +58,10 @@ class ConfigContentProvider : ContentProvider() {
   }
 
   override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
-    when (method) {
-      METHOD_HEARTBEAT -> {
-        enforceSystemOrSelf()
-        context?.let { HookHeartbeat.recordPing(it, arg.orEmpty()) }
-        return Bundle.EMPTY
-      }
-      METHOD_FRAMEWORK_INFO -> {
-        enforceSystemOrSelf()
-        val ctx = context
-        if (ctx != null && extras != null) {
-          HookHeartbeat.recordFrameworkInfo(
-                  ctx,
-                  name = extras.getString(EXTRA_FRAMEWORK_NAME).orEmpty(),
-                  version = extras.getString(EXTRA_FRAMEWORK_VERSION).orEmpty(),
-                  versionCode = extras.getLong(EXTRA_FRAMEWORK_VERSION_CODE, 0L)
-          )
-        }
-        return Bundle.EMPTY
-      }
+    if (method == METHOD_HEARTBEAT) {
+      enforceSystemOrSelf()
+      context?.let { HookHeartbeat.recordPing(it, arg.orEmpty(), extras) }
+      return Bundle.EMPTY
     }
     return super.call(method, arg, extras)
   }
@@ -105,7 +90,6 @@ class ConfigContentProvider : ContentProvider() {
     const val AUTHORITY = "com.rhencloud.sleepyxposed.config"
     val CONTENT_URI: Uri = Uri.parse("content://$AUTHORITY/config")
     const val METHOD_HEARTBEAT = "heartbeat"
-    const val METHOD_FRAMEWORK_INFO = "framework_info"
     const val EXTRA_FRAMEWORK_NAME = "framework_name"
     const val EXTRA_FRAMEWORK_VERSION = "framework_version"
     const val EXTRA_FRAMEWORK_VERSION_CODE = "framework_version_code"

@@ -5,10 +5,11 @@ import android.media.MediaMetadata
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
 import java.io.BufferedReader
 import java.io.IOException
 import java.io.InputStreamReader
+import java.util.concurrent.TimeUnit
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.Response
@@ -34,6 +35,7 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
     companion object {
         private const val TAG = "SleepyXposed-Media"
         private const val POLL_INTERVAL_MS = 8_000L
+        private const val DUMPSYS_TIMEOUT_SECONDS = 5L
         private val DUMPSYS_DESCRIPTION_REGEX = Regex("description=([^,]+),\\s*([^,]+)")
         private const val NOT_PLAYING_STATUS = "未在播放"
     }
@@ -45,6 +47,7 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
     private var pollRunnable: Runnable? = null
     private var lastStatus: String? = null
     private var lastSkipReason: String? = null
+    private var mediaSessionManager: MediaSessionManager? = null
 
     fun initializeForSystemServer(classLoader: ClassLoader) {
         log("$TAG: Initializing media status monitor...")
@@ -62,8 +65,11 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
                 return
             }
 
-            val looper = context.mainLooper ?: Looper.myLooper() ?: Looper.getMainLooper()
-            handler = Handler(looper)
+            // Never run polling on the system_server main thread: both the MediaSessionManager
+            // query and the blocking dumpsys child process could stall it and trigger a Watchdog
+            // soft reboot. A dedicated HandlerThread keeps this work off the main looper.
+            val thread = HandlerThread("$TAG-poll").also { it.start() }
+            handler = Handler(thread.looper)
             schedulePoll(POLL_INTERVAL_MS)
             log("$TAG: Media status monitor initialized")
         } catch (e: Exception) {
@@ -87,6 +93,10 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
     }
 
     private fun poll() {
+        // Throttled internally — proves the media hook side is alive regardless of whether
+        // media reporting itself is enabled/configured below.
+        HookHeartbeat.ping(systemContext)
+
         val config = ConfigManager.loadConfigFromXSharedPreferences(systemContext)
         if (!config.enabled) {
             return
@@ -95,13 +105,13 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
             return
         }
         if (config.mediaDeviceId.isBlank() || config.mediaShowName.isBlank()) {
-            logSkipOnce("media device id / show name empty")
+            logSkipOnce("media device id / show name empty") { "media device id / show name empty" }
             return
         }
         if (config.serverUrl.isBlank() || config.secret.isBlank()) {
-            logSkipOnce(
+            logSkipOnce("server url / secret empty") {
                 "server url / secret empty — ${ConfigManager.describeLoadSources(systemContext)}"
-            )
+            }
             return
         }
         lastSkipReason = null
@@ -127,8 +137,9 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
             using = false
         }
 
+        // Only treat the status as delivered once the server confirms it; a failed send should
+        // not suppress the next poll of the same status.
         if (status == lastStatus) return
-        lastStatus = status
         log("$TAG: Media status changed via $resolvedMethod: $status")
 
         try {
@@ -149,6 +160,8 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
                             response.use {
                                 if (!response.isSuccessful) {
                                     log("$TAG: Server error: ${response.code}")
+                                } else {
+                                    lastStatus = status
                                 }
                             }
                         }
@@ -159,17 +172,19 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
         }
     }
 
-    private fun logSkipOnce(reason: String) {
-        if (lastSkipReason == reason) return
-        lastSkipReason = reason
-        log("$TAG: Media report skipped: $reason")
+    private fun logSkipOnce(reasonKey: String, message: () -> String) {
+        if (lastSkipReason == reasonKey) return
+        lastSkipReason = reasonKey
+        log("$TAG: Media report skipped: ${message()}")
     }
 
     private fun readViaMediaSessionManager(): MediaInfo? {
         val context = systemContext ?: return null
         return try {
             val manager =
-                context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+                mediaSessionManager
+                    ?: (context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager)
+                        ?.also { mediaSessionManager = it }
                     ?: return null
             val sessions = manager.getActiveSessions(null)
             val playing =
@@ -195,22 +210,37 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
     }
 
     private fun readViaDumpsys(): MediaInfo? {
+        var process: Process? = null
         return try {
-            val process =
-                ProcessBuilder("dumpsys", "media_session").redirectErrorStream(true).start()
-            val output =
-                BufferedReader(InputStreamReader(process.inputStream)).use { it.readText() }
-            process.waitFor()
+            process = ProcessBuilder("dumpsys", "media_session").redirectErrorStream(true).start()
+            // Bounded wait so a hung dumpsys can never block the (system_server) caller; the
+            // process is destroyed in the finally block on the way out.
+            if (!process.waitFor(DUMPSYS_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                log("$TAG: dumpsys media_session timed out")
+                return null
+            }
+            val output = BufferedReader(InputStreamReader(process.inputStream)).use { it.readText() }
 
-            if (!output.contains("state=PLAYING")) return null
+            // dumpsys prints one block per media session; the first description= in the whole
+            // dump may belong to a paused session. Select only the block that is actually
+            // PLAYING and extract its description, so we never report the wrong track.
+            val playingBlock =
+                output
+                    .split(Regex("(?m)^\\s*#\\d+:\\s*MediaSession"))
+                    .firstOrNull { block ->
+                        block.contains("state=PLAYING") || block.contains("state=3")
+                    }
+                    ?: return null
 
-            val match = DUMPSYS_DESCRIPTION_REGEX.find(output) ?: return null
+            val match = DUMPSYS_DESCRIPTION_REGEX.find(playingBlock) ?: return null
             val title = match.groupValues[1].trim()
             val artist = match.groupValues[2].trim().let { if (it == "null") "" else it }
             if (title.isBlank()) null else MediaInfo(title, artist)
         } catch (e: Exception) {
             log("$TAG: dumpsys read failed: ${e.message}")
             null
+        } finally {
+            process?.destroy()
         }
     }
 }

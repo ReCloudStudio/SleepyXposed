@@ -2,6 +2,7 @@ package io.github.recloudstudio.sleepyxposed
 
 import android.content.Context
 import android.os.Environment
+import android.os.SystemClock
 import java.io.File
 import org.json.JSONObject
 
@@ -20,7 +21,16 @@ data class SleepyConfig(
         val mediaShowName: String = "",
         /** Name of the [MediaMethod] used to acquire media playback status. */
         val mediaMethod: String = MediaMethod.AUTO.name
-)
+) {
+  fun hasRequiredFields(): Boolean {
+    return serverUrl.isNotBlank() && secret.isNotBlank() && deviceId.isNotBlank() && showName.isNotBlank()
+  }
+
+  /** Complete enough for the public JSON mirror, which deliberately excludes [secret]. */
+  fun hasRequiredPublicFields(): Boolean {
+    return serverUrl.isNotBlank() && deviceId.isNotBlank() && showName.isNotBlank()
+  }
+}
 
 /** Configuration manager for loading and saving config across app + system_server. */
 object ConfigManager {
@@ -38,6 +48,13 @@ object ConfigManager {
   private const val FALLBACK_DIR = "SleepyXposed"
   private const val FALLBACK_FILE_NAME = "config.json"
 
+  // Hooked-process config reads happen on a hot path (MediaStatusMonitor polls every few
+  // seconds). Config only changes when the user hits Save, so memoize it for a short window
+  // instead of re-running a ContentProvider IPC + filesystem fallback chain on every poll.
+  private const val SYSTEM_CACHE_TTL_MS = 15_000L
+  @Volatile private var cachedSystemConfig: SleepyConfig? = null
+  @Volatile private var cachedSystemConfigAt: Long = 0L
+
   /** Load configuration for module app process */
   fun loadConfig(context: Context): SleepyConfig {
     return try {
@@ -47,67 +64,59 @@ object ConfigManager {
       val ce = readConfigFromPrefs(context, requireComplete = false)
       if (ce != null && ce.hasRequiredFields()) return ce
 
-      loadConfigFromJsonFiles(context)
-              ?: de
-              ?: ce
-              ?: SleepyConfig()
+      loadConfigFromJsonFiles(context) ?: de ?: ce ?: SleepyConfig()
     } catch (_: Exception) {
       loadConfigFromJsonFiles(context) ?: SleepyConfig()
     }
   }
 
   /**
-   * Load configuration inside hooked processes (typically system_server).
+   * Load configuration inside hooked processes (typically system_server), with a short-lived
+   * cache (see [SYSTEM_CACHE_TTL_MS]).
    *
-   * Private app data is SELinux-blocked from system_server on modern ROMs, and classic
-   * XSharedPreferences is unreliable under libxposed API 101. Prefer:
-   * 1. ContentProvider (app process reads its own prefs)
-   * 2. Public / media JSON files written on save
-   * 3. Legacy XSharedPreferences / prefs XML (best-effort)
+   * Private app data is SELinux-blocked from system_server on modern ROMs, so the primary path
+   * is a [ConfigContentProvider] query (app process reads its own prefs on the system's behalf),
+   * with a public JSON file as fallback for the rare case a provider query can't be made.
    */
-  fun loadConfigFromXSharedPreferences(systemContext: Context? = null): SleepyConfig {
-    systemContext?.let { ctx ->
-      loadViaContentProvider(ctx)?.takeIf { it.hasRequiredFields() }?.let {
-        return it
-      }
+  fun loadConfigFromXSharedPreferences(systemContext: Context? = null, forceRefresh: Boolean = false): SleepyConfig {
+    val now = SystemClock.elapsedRealtime()
+    val cached = cachedSystemConfig
+    if (!forceRefresh && cached != null && now - cachedSystemConfigAt < SYSTEM_CACHE_TTL_MS) {
+      return cached
     }
 
-    loadConfigFromJsonFiles(null)?.takeIf { it.hasRequiredFields() }?.let {
-      return it
-    }
-
-    loadViaLegacyXSharedPreferences()?.takeIf { it.hasRequiredFields() }?.let {
-      return it
-    }
-
-    loadConfigFromPrefsXmlFiles()?.takeIf { it.hasRequiredFields() }?.let {
-      return it
-    }
-
-    return loadViaContentProvider(systemContext)
-            ?: loadConfigFromJsonFiles(null)
-            ?: loadViaLegacyXSharedPreferences()
-            ?: loadConfigFromPrefsXmlFiles()
-            ?: SleepyConfig()
+    val fresh = loadConfigFromXSharedPreferencesUncached(systemContext)
+    cachedSystemConfig = fresh
+    cachedSystemConfigAt = now
+    return fresh
   }
 
-  /** Human-readable diagnostics for why system_server cannot see config. */
+  private fun loadConfigFromXSharedPreferencesUncached(systemContext: Context?): SleepyConfig {
+    val provider = systemContext?.let { loadViaContentProvider(it) }
+    if (provider != null && provider.hasRequiredFields()) return provider
+
+    val json = loadConfigFromJsonFiles(null)
+    if (json != null && json.hasRequiredPublicFields()) return json
+
+    loadViaLegacyXSharedPreferences()?.takeIf { it.hasRequiredFields() }?.let { return it }
+    loadConfigFromPrefsXmlFiles()?.let { return it }
+
+    return provider ?: json ?: SleepyConfig()
+  }
+
+  /** Human-readable diagnostics for why system_server cannot see config. Diagnostic-only. */
   fun describeLoadSources(systemContext: Context?): String {
-    val parts = mutableListOf<String>()
     val provider = runCatching { loadViaContentProvider(systemContext) }.getOrNull()
-    parts.add(
-            "provider=${provider?.let { if (it.hasRequiredFields()) "ok" else "incomplete" } ?: "fail"}"
-    )
     val json = runCatching { loadConfigFromJsonFiles(null) }.getOrNull()
-    parts.add("json=${json?.let { if (it.hasRequiredFields()) "ok" else "incomplete" } ?: "fail"}")
     val xsp = runCatching { loadViaLegacyXSharedPreferences() }.getOrNull()
-    parts.add("xsp=${xsp?.let { if (it.hasRequiredFields()) "ok" else "incomplete" } ?: "fail"}")
     val xml = runCatching { loadConfigFromPrefsXmlFiles() }.getOrNull()
-    parts.add("prefsXml=${xml?.let { if (it.hasRequiredFields()) "ok" else "incomplete" } ?: "fail"}")
     val existing =
             getAllJsonCandidates(null).filter { it.exists() }.joinToString(",") { it.absolutePath }
-    parts.add("jsonFiles=[${existing.ifBlank { "none" }}]")
-    return parts.joinToString("; ")
+    return "provider=${provider?.let { if (it.hasRequiredFields()) "ok" else "incomplete" } ?: "fail"}; " +
+            "json=${json?.let { if (it.hasRequiredPublicFields()) "ok" else "incomplete" } ?: "fail"}; " +
+            "xsp=${xsp?.let { if (it.hasRequiredFields()) "ok" else "incomplete" } ?: "fail"}; " +
+            "prefsXml=${xml?.let { if (it.hasRequiredFields()) "ok" else "incomplete" } ?: "fail"}; " +
+            "jsonFiles=[${existing.ifBlank { "none" }}]"
   }
 
   private fun loadViaContentProvider(context: Context?): SleepyConfig? {
@@ -127,15 +136,17 @@ object ConfigManager {
                   return if (i >= 0 && !cursor.isNull(i)) cursor.getInt(i) != 0 else false
                 }
                 SleepyConfig(
-                        serverUrl = str("server_url"),
-                        secret = str("secret"),
-                        deviceId = str("device_id"),
-                        showName = str("show_name"),
-                        enabled = bool("enabled"),
-                        mediaEnabled = bool("media_enabled"),
-                        mediaDeviceId = str("media_device_id"),
-                        mediaShowName = str("media_show_name"),
-                        mediaMethod = str("media_method").ifBlank { MediaMethod.AUTO.name }
+                        serverUrl = str(ConfigContentProvider.COLUMN_SERVER_URL),
+                        secret = str(ConfigContentProvider.COLUMN_SECRET),
+                        deviceId = str(ConfigContentProvider.COLUMN_DEVICE_ID),
+                        showName = str(ConfigContentProvider.COLUMN_SHOW_NAME),
+                        enabled = bool(ConfigContentProvider.COLUMN_ENABLED),
+                        mediaEnabled = bool(ConfigContentProvider.COLUMN_MEDIA_ENABLED),
+                        mediaDeviceId = str(ConfigContentProvider.COLUMN_MEDIA_DEVICE_ID),
+                        mediaShowName = str(ConfigContentProvider.COLUMN_MEDIA_SHOW_NAME),
+                        mediaMethod =
+                                str(ConfigContentProvider.COLUMN_MEDIA_METHOD)
+                                        .ifBlank { MediaMethod.AUTO.name }
                 )
               }
     } catch (_: Exception) {
@@ -143,6 +154,7 @@ object ConfigManager {
     }
   }
 
+  /** Legacy [de.robv.android.xposed.XSharedPreferences] read for older ROMs where the provider cannot be reached. */
   private fun loadViaLegacyXSharedPreferences(): SleepyConfig? {
     return try {
       val clazz = Class.forName("de.robv.android.xposed.XSharedPreferences")
@@ -174,6 +186,7 @@ object ConfigManager {
     }
   }
 
+  /** Parse the app's SharedPreferences XML directly when other paths are SELinux-blocked. */
   private fun loadConfigFromPrefsXmlFiles(): SleepyConfig? {
     for (file in getModulePrefsXmlCandidates()) {
       try {
@@ -237,8 +250,15 @@ object ConfigManager {
   fun saveConfig(context: Context, config: SleepyConfig): Boolean {
     val deSaved = writeConfigToPrefs(getDeviceProtectedContext(context), config)
     val ceSaved = writeConfigToPrefs(context, config)
-    // JSON mirrors for system_server (private app data is SELinux-blocked from system).
+    // JSON mirror for system_server (private app data is SELinux-blocked from system).
     val jsonSaved = saveConfigToJsonFiles(context, config)
+
+    // cachedSystemConfig is a process-local static: clearing it here only invalidates the
+    // copy in THIS process (the app). system_server's own copy refreshes on its next poll once
+    // the TTL window elapses; the notifyChange below lets a system-side ContentObserver hook
+    // into that (there is currently none registered), so the TTL is the effective bound there.
+    cachedSystemConfig = null
+    cachedSystemConfigAt = 0L
 
     try {
       context.contentResolver.notifyChange(ConfigContentProvider.CONTENT_URI, null)
@@ -308,11 +328,12 @@ object ConfigManager {
     return getPrimaryPublicConfigFile().absolutePath
   }
 
-  private fun configToJson(config: SleepyConfig): String {
+  /** [secret] is written only when [includeSecret] is true (private prefs); never to the public JSON mirror. */
+  private fun configToJson(config: SleepyConfig, includeSecret: Boolean = true): String {
     return JSONObject()
             .apply {
               put(KEY_SERVER_URL, config.serverUrl)
-              put(KEY_SECRET, config.secret)
+              if (includeSecret) put(KEY_SECRET, config.secret)
               put(KEY_DEVICE_ID, config.deviceId)
               put(KEY_SHOW_NAME, config.showName)
               put(KEY_ENABLED, config.enabled)
@@ -344,7 +365,9 @@ object ConfigManager {
   }
 
   private fun saveConfigToJsonFiles(context: Context, config: SleepyConfig): Boolean {
-    val json = configToJson(config)
+    // The public mirror never carries the secret — it authenticates device reports, so it must
+    // not be readable from a world-readable file. system_server gets it via the provider query.
+    val json = configToJson(config, includeSecret = false)
     var any = false
     for (file in getAllJsonCandidates(context)) {
       try {
@@ -368,7 +391,8 @@ object ConfigManager {
       try {
         if (!file.exists() || !file.canRead()) continue
         val config = parseConfigJson(file.readText()) ?: continue
-        if (config.hasRequiredFields()) {
+        // The public mirror has no secret; only require the fields it actually carries.
+        if (config.hasRequiredPublicFields()) {
           return config
         }
       } catch (_: Exception) {}
@@ -378,46 +402,37 @@ object ConfigManager {
 
   private fun getPrimaryPublicConfigFile(): File {
     return File(
-            "/storage/emulated/0/Android/media/$MODULE_PACKAGE_NAME/$FALLBACK_DIR/$FALLBACK_FILE_NAME"
+            Environment.getExternalStorageDirectory(),
+            "Android/media/$MODULE_PACKAGE_NAME/$FALLBACK_DIR/$FALLBACK_FILE_NAME"
     )
   }
 
+  /**
+   * Two write/read targets only: the package-specific public media dir (no permission needed,
+   * readable by system_server), and the app's own external-files dir as a backup for ROMs where
+   * the first path behaves unexpectedly. Earlier revisions probed ~8 candidate paths per call
+   * (each a filesystem stat); that cost was paid on every config read/write for no measurable
+   * reliability gain, so it has been trimmed down to these two.
+   */
   private fun getAllJsonCandidates(context: Context?): List<File> {
     val files = linkedSetOf<File>()
-
-    // Prefer Android/media — app can write without special storage permission; system can usually read.
     files.add(getPrimaryPublicConfigFile())
-    files.add(
-            File("/sdcard/Android/media/$MODULE_PACKAGE_NAME/$FALLBACK_DIR/$FALLBACK_FILE_NAME")
-    )
 
     if (context != null) {
-      try {
-        context.externalMediaDirs?.forEach { mediaDir ->
-          if (mediaDir != null) {
-            files.add(File(mediaDir, "$FALLBACK_DIR/$FALLBACK_FILE_NAME"))
-          }
-        }
-      } catch (_: Exception) {}
       try {
         context.getExternalFilesDir(null)?.let { ext ->
           files.add(File(ext, "$FALLBACK_DIR/$FALLBACK_FILE_NAME"))
         }
       } catch (_: Exception) {}
+    } else {
+      val externalRoot = Environment.getExternalStorageDirectory()
+      files.add(
+              File(
+                      externalRoot,
+                      "Android/data/$MODULE_PACKAGE_NAME/files/$FALLBACK_DIR/$FALLBACK_FILE_NAME"
+              )
+      )
     }
-
-    val externalRoot = Environment.getExternalStorageDirectory()
-    files.add(File(externalRoot, "Android/media/$MODULE_PACKAGE_NAME/$FALLBACK_DIR/$FALLBACK_FILE_NAME"))
-    files.add(File(externalRoot, "Android/data/$MODULE_PACKAGE_NAME/files/$FALLBACK_DIR/$FALLBACK_FILE_NAME"))
-    files.add(File(externalRoot, "$FALLBACK_DIR/$FALLBACK_FILE_NAME"))
-    files.add(File("/sdcard/$FALLBACK_DIR/$FALLBACK_FILE_NAME"))
-    files.add(File("/storage/emulated/0/$FALLBACK_DIR/$FALLBACK_FILE_NAME"))
-    files.add(
-            File(
-                    externalRoot,
-                    "Android/data/$MODULE_PACKAGE_NAME/files/$FALLBACK_DIR/$FALLBACK_FILE_NAME"
-            )
-    )
 
     return files.toList()
   }
@@ -441,12 +456,5 @@ object ConfigManager {
     } catch (_: Exception) {
       // Best-effort
     }
-  }
-
-  private fun SleepyConfig.hasRequiredFields(): Boolean {
-    return serverUrl.isNotBlank() &&
-            secret.isNotBlank() &&
-            deviceId.isNotBlank() &&
-            showName.isNotBlank()
   }
 }

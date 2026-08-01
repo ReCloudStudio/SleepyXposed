@@ -4,29 +4,38 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Package-visibility declarations (targetSdk 30+) so RomDetector.hasPackage() can see
+         these ROM-identity packages via getPackageInfo. -->
+    <queries>
+        <package android:name="com.miui.securitycenter" />
+        <package android:name="com.coloros.safecenter" />
+        <package android:name="com.vivo.abe" />
+        <package android:name="com.huawei.systemmanager" />
+    </queries>
+
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="true"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        android:hardwareAccelerated="true"
+        android:theme="@style/Theme.SleepyXposed">
 
         <uses-library
             android:name="de.robv.android.xposed"
             android:required="false" />
 
-        <!-- Main Activity for Configuration -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+            android:theme="@style/Theme.SleepyXposed"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- Notification listener used for the media-status "Notification Listener" method -->
         <service
             android:name=".MediaListenerService"
             android:label="@string/media_listener_label"
@@ -37,11 +46,9 @@
             </intent-filter>
         </service>
 
-        <!--
-          Exposes config to system_server. Private SharedPreferences are SELinux-blocked from
-          system_server under modern ROMs / libxposed API 101; the provider is queried with the
-          module app identity so prefs load correctly. Only system UID may read (enforced in code).
-        -->
+        <!-- Exported so system_server (via the Xposed hook) can read config and record
+             heartbeats across processes. Access is enforced in-code: query() requires the
+             system UID or our own process, and heartbeat calls require system_server only. -->
         <provider
             android:name=".ConfigContentProvider"
             android:authorities="io.github.recloudstudio.sleepyxposed.config"
@@ -50,7 +57,6 @@
             android:directBootAware="true"
             android:grantUriPermissions="false" />
 
-        <!-- Xposed Module Metadata -->
         <meta-data
             android:name="xposedmodule"
             android:value="true" />

@@ -1,24 +1,38 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
+# ---- SleepyXposed R8 rules ----
+# Do NOT keep the whole app package; that prevents shrinking Compose / Material.
 
-# Keep Xposed API
--keep class de.robv.android.xposed.** { *; }
+# libxposed / legacy Xposed entry (compileOnly — names kept for runtime)
+-keep class io.github.recloudstudio.sleepyxposed.ModuleMain { *; }
+-keep class * extends io.github.libxposed.api.XposedModule { *; }
 
-# Keep our module class
--keep class io.github.recloudstudio.sleepyxposed.** { *; }
+# Components declared in the manifest
+-keep class io.github.recloudstudio.sleepyxposed.MainActivity { *; }
+-keep class io.github.recloudstudio.sleepyxposed.ConfigContentProvider { *; }
+-keep class io.github.recloudstudio.sleepyxposed.MediaListenerService { *; }
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Optional hook target for LSPosed (must keep signature)
+-keep class io.github.recloudstudio.sleepyxposed.XposedProbe {
+    public static boolean isModuleActive();
+}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Config model used across processes / JSON
+-keepclassmembers class io.github.recloudstudio.sleepyxposed.SleepyConfig { *; }
+-keepclassmembers class io.github.recloudstudio.sleepyxposed.MediaMethod { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Hook / system-server logic must not be stripped (reflection + Xposed)
+-keep class io.github.recloudstudio.sleepyxposed.ConfigManager { *; }
+-keep class io.github.recloudstudio.sleepyxposed.ForegroundAppMonitor { *; }
+-keep class io.github.recloudstudio.sleepyxposed.MediaStatusMonitor { *; }
+-keep class io.github.recloudstudio.sleepyxposed.SleepyApiClient { *; }
+-keep class io.github.recloudstudio.sleepyxposed.RomDetector { *; }
+
+# Reflection in ConfigManager (XSharedPreferences)
+-dontwarn de.robv.android.xposed.**
+-dontwarn io.github.libxposed.**
+
+# Compose / Kotlin
+-dontwarn org.jetbrains.annotations.**
+
+# Keep line numbers for crash logs (small cost)
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

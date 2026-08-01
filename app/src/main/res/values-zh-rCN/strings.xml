@@ -67,7 +67,6 @@
   <string name="status_device">设备</string>
   <string name="status_brand">品牌</string>
   <string name="status_rom">ROM / 系统 UI</string>
-  <string name="status_recommended_method">推荐媒体方式</string>
   <string name="config_saved">配置保存成功！\n\n请重启设备以使更改生效。</string>
   <string name="fill_all_fields">请填写所有字段</string>
   <string name="config_saved_toast">配置已保存</string>

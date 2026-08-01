@@ -211,12 +211,6 @@ private fun InfoCard(data: StatusSnapshot, showMore: Boolean, onToggleMore: () -
                                 else " (${stringResource(R.string.status_missing_file)})"
                     )
                 }
-                if (data.recommendationReason.isNotBlank()) {
-                    InfoItem(
-                        label = stringResource(R.string.status_recommended_method),
-                        value = "${data.recommendedMethod}\n${data.recommendationReason}"
-                    )
-                }
                 if (!data.moduleHookActive) {
                     Text(
                         text = stringResource(R.string.status_module_hook_hint),

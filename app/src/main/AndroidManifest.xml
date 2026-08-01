@@ -4,6 +4,16 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Package-visibility (API 30+): without this, PackageManager.getPackageInfo() for these
+         packages always throws NameNotFoundException regardless of whether they're actually
+         installed, which made the Xposed-framework detection on the Overview page always show
+         "unknown / not detected" even when LSPosed was present and working fine. -->
+    <queries>
+        <package android:name="org.lsposed.manager" />
+        <package android:name="org.lsposed.lspatch" />
+        <package android:name="io.github.lsposed.manager" />
+    </queries>
+
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"

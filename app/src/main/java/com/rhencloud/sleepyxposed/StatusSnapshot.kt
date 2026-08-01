@@ -24,8 +24,6 @@ data class StatusSnapshot(
     val manufacturer: String,
     val brand: String,
     val romFamily: String,
-    val recommendedMethod: String,
-    val recommendationReason: String,
     val appVersionName: String,
     val appVersionCode: Long,
     val packageName: String,
@@ -39,8 +37,8 @@ data class StatusSnapshot(
         private val LSPOSED_PACKAGES =
             listOf(
                 "org.lsposed.manager",
-                "io.github.lsposed.manager",
-                "org.lsposed.manager.tip"
+                "org.lsposed.lspatch",
+                "io.github.lsposed.manager"
             )
 
         fun collect(context: Context): StatusSnapshot {
@@ -56,14 +54,6 @@ data class StatusSnapshot(
                         context.getString(R.string.media_method_notification_listener)
                     MediaMethod.DUMPSYS_SHELL ->
                         context.getString(R.string.media_method_dumpsys_shell)
-                }
-            val recommendedLabel =
-                when (recommendation?.method) {
-                    MediaMethod.SYSTEM_HOOK ->
-                        context.getString(R.string.media_method_system_hook)
-                    MediaMethod.NOTIFICATION_LISTENER ->
-                        context.getString(R.string.media_method_notification_listener)
-                    else -> "—"
                 }
             val path = runCatching { ConfigManager.getConfigFilePath(context) }.getOrElse { "" }
             val (verName, verCode) = appVersion(context)
@@ -86,8 +76,6 @@ data class StatusSnapshot(
                 manufacturer = manufacturer,
                 brand = Build.BRAND.orEmpty(),
                 romFamily = recommendation?.rom?.displayName ?: "—",
-                recommendedMethod = recommendedLabel,
-                recommendationReason = recommendation?.reason.orEmpty(),
                 appVersionName = verName,
                 appVersionCode = verCode,
                 packageName = context.packageName,

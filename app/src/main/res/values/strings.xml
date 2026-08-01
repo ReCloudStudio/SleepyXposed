@@ -69,7 +69,6 @@
     <string name="status_device">Device</string>
     <string name="status_brand">Brand</string>
     <string name="status_rom">ROM / System UI</string>
-    <string name="status_recommended_method">Recommended media method</string>
     <string name="config_saved">Configuration saved successfully!\n\nPlease reboot your device for
         changes to take effect.</string>
     <string name="fill_all_fields">Please fill in all fields</string>

@@ -34,13 +34,6 @@ data class StatusSnapshot(
     val systemLine: String
 ) {
     companion object {
-        private val LSPOSED_PACKAGES =
-            listOf(
-                "org.lsposed.manager",
-                "org.lsposed.lspatch",
-                "io.github.lsposed.manager"
-            )
-
         fun collect(context: Context): StatusSnapshot {
             val config =
                 runCatching { ConfigManager.loadConfig(context) }.getOrElse { SleepyConfig() }
@@ -87,61 +80,18 @@ data class StatusSnapshot(
             )
         }
 
+        /**
+         * Read the framework name/version straight from [HookHeartbeat] — pushed by
+         * [ForegroundAppMonitor] directly from the libxposed `XposedInterface` this module is
+         * attached to (`getFrameworkName()` / `getFrameworkVersion()`). That's the authoritative
+         * source; it does not depend on whether a standalone LSPosed manager app happens to be
+         * installed (most people never install one), nor is it affected by package-visibility
+         * filtering (API 30+), which made an earlier "check if this package is installed"
+         * heuristic unreliable.
+         */
         private fun detectXposedFramework(context: Context): String {
-            for (pkg in LSPOSED_PACKAGES) {
-                if (isPackageInstalled(context, pkg)) {
-                    val ver = packageVersionLabel(context, pkg)
-                    return if (ver != null) "LSPosed ($ver)" else "LSPosed"
-                }
-            }
-            // Bridge class presence (legacy / some environments)
-            return try {
-                Class.forName("de.robv.android.xposed.XposedBridge")
-                "Xposed"
-            } catch (_: Throwable) {
-                context.getString(R.string.status_framework_unknown)
-            }
-        }
-
-        private fun isPackageInstalled(context: Context, packageName: String): Boolean {
-            return try {
-                if (Build.VERSION.SDK_INT >= 33) {
-                    context.packageManager.getPackageInfo(
-                        packageName,
-                        PackageManager.PackageInfoFlags.of(0)
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    context.packageManager.getPackageInfo(packageName, 0)
-                }
-                true
-            } catch (_: Exception) {
-                false
-            }
-        }
-
-        private fun packageVersionLabel(context: Context, packageName: String): String? {
-            return try {
-                val pi =
-                    if (Build.VERSION.SDK_INT >= 33) {
-                        context.packageManager.getPackageInfo(
-                            packageName,
-                            PackageManager.PackageInfoFlags.of(0)
-                        )
-                    } else {
-                        @Suppress("DEPRECATION")
-                        context.packageManager.getPackageInfo(packageName, 0)
-                    }
-                val code =
-                    if (Build.VERSION.SDK_INT >= 28) pi.longVersionCode
-                    else {
-                        @Suppress("DEPRECATION")
-                        pi.versionCode.toLong()
-                    }
-                code.toString()
-            } catch (_: Exception) {
-                null
-            }
+            val info = HookHeartbeat.frameworkInfo(context) ?: return context.getString(R.string.status_framework_unknown)
+            return if (info.version.isNotBlank()) "${info.name} (${info.version})" else info.name
         }
 
         private fun appVersion(context: Context): Pair<String, Long> {

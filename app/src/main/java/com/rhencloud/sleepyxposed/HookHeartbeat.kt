@@ -1,6 +1,7 @@
 package com.rhencloud.sleepyxposed
 
 import android.content.Context
+import android.os.Bundle
 import android.os.SystemClock
 
 /**
@@ -30,6 +31,9 @@ object HookHeartbeat {
     private const val PREFS_NAME = "sleepy_heartbeat"
     private const val KEY_LAST_SEEN_MS = "last_seen_ms"
     private const val KEY_LAST_DETAIL = "last_detail"
+    private const val KEY_FRAMEWORK_NAME = "framework_name"
+    private const val KEY_FRAMEWORK_VERSION = "framework_version"
+    private const val KEY_FRAMEWORK_VERSION_CODE = "framework_version_code"
 
     /** Don't ping on every single call (e.g. every foreground-app switch) — only this often. */
     private const val PING_THROTTLE_MS = 30_000L
@@ -38,6 +42,8 @@ object HookHeartbeat {
     private const val FRESHNESS_WINDOW_MS = 90_000L
 
     @Volatile private var lastPingAtElapsed: Long = 0L
+
+    data class FrameworkInfo(val name: String, val version: String, val versionCode: Long)
 
     /**
      * Call from system_server-side code (via [systemContext]) whenever a hook demonstrably
@@ -72,6 +78,66 @@ object HookHeartbeat {
                 .apply()
         } catch (_: Exception) {
             // Best-effort.
+        }
+    }
+
+    /**
+     * Call from system_server-side code once, right after obtaining a system [Context] — pushes
+     * the *actual* running framework's name/version, read straight from the libxposed
+     * `XposedInterface` this module is attached to (`getFrameworkName()` / `getFrameworkVersion()`
+     * / `getFrameworkVersionCode()`). This is the authoritative source: it doesn't depend on
+     * guessing from whether some standalone manager app happens to be installed, which most
+     * people never bother with and which package-visibility filtering (API 30+) makes unreliable
+     * to probe for anyway.
+     */
+    fun pushFrameworkInfo(systemContext: Context, name: String, version: String, versionCode: Long) {
+        try {
+            val extras =
+                Bundle().apply {
+                    putString(ConfigContentProvider.EXTRA_FRAMEWORK_NAME, name)
+                    putString(ConfigContentProvider.EXTRA_FRAMEWORK_VERSION, version)
+                    putLong(ConfigContentProvider.EXTRA_FRAMEWORK_VERSION_CODE, versionCode)
+                }
+            systemContext.contentResolver.call(
+                ConfigContentProvider.CONTENT_URI,
+                ConfigContentProvider.METHOD_FRAMEWORK_INFO,
+                null,
+                extras
+            )
+        } catch (_: Exception) {
+            // Best-effort; UI falls back to "unknown" if this never lands.
+        }
+    }
+
+    /** Called by [ConfigContentProvider.call] inside the app process — plain private prefs. */
+    fun recordFrameworkInfo(appContext: Context, name: String, version: String, versionCode: Long) {
+        if (name.isBlank()) return
+        try {
+            appContext
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_FRAMEWORK_NAME, name)
+                .putString(KEY_FRAMEWORK_VERSION, version)
+                .putLong(KEY_FRAMEWORK_VERSION_CODE, versionCode)
+                .apply()
+        } catch (_: Exception) {
+            // Best-effort.
+        }
+    }
+
+    /** Call from the app UI process. Null until the hook has pushed framework info at least once. */
+    fun frameworkInfo(context: Context): FrameworkInfo? {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val name = prefs.getString(KEY_FRAMEWORK_NAME, null)
+            if (name.isNullOrBlank()) return null
+            FrameworkInfo(
+                name = name,
+                version = prefs.getString(KEY_FRAMEWORK_VERSION, "").orEmpty(),
+                versionCode = prefs.getLong(KEY_FRAMEWORK_VERSION_CODE, 0L)
+            )
+        } catch (_: Exception) {
+            null
         }
     }
 

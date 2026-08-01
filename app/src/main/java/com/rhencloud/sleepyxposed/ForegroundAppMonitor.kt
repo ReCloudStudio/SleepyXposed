@@ -107,6 +107,7 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
                 // Prove the hook is alive as soon as bootstrap succeeds, even before the first
                 // foreground-app switch happens.
                 HookHeartbeat.ping(systemContext, "bootstrap")
+                reportFrameworkInfo()
             }
         } catch (e: Exception) {
             log("$TAG: Failed to get system context: ${e.message}")
@@ -184,6 +185,27 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
             }
         }
         return null
+    }
+
+    /**
+     * Report the framework actually running this module (name/version straight from the
+     * libxposed interface), rather than guessing based on whether some manager app happens to be
+     * installed — not everyone installs a standalone LSPosed manager app, and package-visibility
+     * filtering (API 30+) makes that guess unreliable anyway.
+     */
+    private fun reportFrameworkInfo() {
+        val ctx = systemContext ?: return
+        val module = ModuleMain.instance ?: return
+        try {
+            HookHeartbeat.pushFrameworkInfo(
+                ctx,
+                name = module.getFrameworkName(),
+                version = module.getFrameworkVersion(),
+                versionCode = module.getFrameworkVersionCode()
+            )
+        } catch (e: Exception) {
+            log("$TAG: Failed to read framework info: ${e.message}")
+        }
     }
 
     private fun loadConfiguration() {

@@ -4,17 +4,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.rhencloud.sleepyxposed.ui.HomeScreen
+import com.rhencloud.sleepyxposed.ui.ConfigScreen
 import com.rhencloud.sleepyxposed.ui.SleepyMiuixTheme
 
-/** Lightweight entry: dashboard only. Configuration lives in [SettingsActivity]. */
-class MainActivity : ComponentActivity() {
+/** Isolated settings activity so the home dashboard never composes the heavy form tree. */
+class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
             SleepyMiuixTheme {
-                HomeScreen()
+                ConfigScreen(onBack = { finish() })
             }
         }
     }

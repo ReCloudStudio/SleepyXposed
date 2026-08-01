@@ -262,11 +262,11 @@ private fun InfoItem(label: String, value: String) {
 
 /** "12s ago" / "3m ago" style summary; null/negative means we've never heard from the hook. */
 private fun formatHeartbeatAge(agoMs: Long?): String {
-    if (agoMs == null) return "—"
+    if (agoMs == null || agoMs < 0) return "—"
     val seconds = agoMs / 1000
     return when {
-        seconds < 60 -> "${seconds}s"
-        seconds < 3600 -> "${seconds / 60}m"
-        else -> "${seconds / 3600}h"
+        seconds < 60 -> "${seconds}s ago"
+        seconds < 3600 -> "${seconds / 60}m ago"
+        else -> "${seconds / 3600}h ago"
     }
 }

@@ -59,7 +59,7 @@ class ConfigContentProvider : ContentProvider() {
 
   override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
     if (method == METHOD_HEARTBEAT) {
-      enforceSystemOrSelf()
+      enforceSystemServerOnly()
       context?.let { HookHeartbeat.recordPing(it, arg.orEmpty(), extras) }
       return Bundle.EMPTY
     }
@@ -81,8 +81,16 @@ class ConfigContentProvider : ContentProvider() {
 
   private fun enforceSystemOrSelf() {
     val uid = Binder.getCallingUid()
-    if (uid != Process.SYSTEM_UID && uid != Process.myUid() && uid != 0) {
+    if (uid != Process.SYSTEM_UID && uid != Process.myUid()) {
       throw SecurityException("SleepyXposed config is only readable by system")
+    }
+  }
+
+  /** Only system_server may record a heartbeat; a root caller must not be able to fake liveness. */
+  private fun enforceSystemServerOnly() {
+    val uid = Binder.getCallingUid()
+    if (uid != Process.SYSTEM_UID) {
+      throw SecurityException("SleepyXposed heartbeat is only writable by system")
     }
   }
 
@@ -94,17 +102,27 @@ class ConfigContentProvider : ContentProvider() {
     const val EXTRA_FRAMEWORK_VERSION = "framework_version"
     const val EXTRA_FRAMEWORK_VERSION_CODE = "framework_version_code"
 
+    const val COLUMN_SERVER_URL = "server_url"
+    const val COLUMN_SECRET = "secret"
+    const val COLUMN_DEVICE_ID = "device_id"
+    const val COLUMN_SHOW_NAME = "show_name"
+    const val COLUMN_ENABLED = "enabled"
+    const val COLUMN_MEDIA_ENABLED = "media_enabled"
+    const val COLUMN_MEDIA_DEVICE_ID = "media_device_id"
+    const val COLUMN_MEDIA_SHOW_NAME = "media_show_name"
+    const val COLUMN_MEDIA_METHOD = "media_method"
+
     val COLUMNS =
             arrayOf(
-                    "server_url",
-                    "secret",
-                    "device_id",
-                    "show_name",
-                    "enabled",
-                    "media_enabled",
-                    "media_device_id",
-                    "media_show_name",
-                    "media_method"
+                    COLUMN_SERVER_URL,
+                    COLUMN_SECRET,
+                    COLUMN_DEVICE_ID,
+                    COLUMN_SHOW_NAME,
+                    COLUMN_ENABLED,
+                    COLUMN_MEDIA_ENABLED,
+                    COLUMN_MEDIA_DEVICE_ID,
+                    COLUMN_MEDIA_SHOW_NAME,
+                    COLUMN_MEDIA_METHOD
             )
   }
 }

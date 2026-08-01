@@ -22,6 +22,6 @@ enum class MediaMethod {
     DUMPSYS_SHELL;
 
     companion object {
-        fun fromString(value: String?): MediaMethod = values().find { it.name == value } ?: AUTO
+        fun fromString(value: String?): MediaMethod = entries.find { it.name == value } ?: AUTO
     }
 }

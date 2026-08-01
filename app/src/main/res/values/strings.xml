@@ -38,19 +38,9 @@
     <string name="info_device">Device</string>
     <string name="info_system_version">System version</string>
     <string name="status_framework_unknown">Unknown / not detected</string>
-    <string name="action_back">Back</string>
     <string name="status_loading">Loading status…</string>
-    <string name="home_section_module">Module</string>
-    <string name="home_section_runtime">Runtime</string>
-    <string name="home_section_system">System</string>
-    <string name="home_section_actions">Actions</string>
-    <string name="open_settings">Open configuration</string>
-    <string name="open_settings_summary">Server, device ID, media reporting</string>
-    <string name="status_module_hook">Framework hook probe</string>
     <string name="status_module_hook_hint">Not detected recently. Make sure the module is enabled in LSPosed with \'System Framework\' scope, then reboot — status here updates automatically once the hook reports in.</string>
     <string name="status_last_heartbeat">Last hook activity</string>
-    <string name="status_active">Active</string>
-    <string name="status_inactive">Not detected</string>
     <string name="status_on">On</string>
     <string name="status_off">Off</string>
     <string name="status_ok">OK</string>
@@ -58,21 +48,19 @@
     <string name="status_granted">Granted</string>
     <string name="status_not_granted">Not granted</string>
     <string name="status_missing_file">file missing</string>
-    <string name="status_app_version">App version</string>
     <string name="status_reporting">App status reporting</string>
     <string name="status_media_reporting">Media reporting</string>
     <string name="status_media_method">Media method</string>
     <string name="status_notification_listener">Notification access</string>
     <string name="status_config_complete">Config completeness</string>
     <string name="status_config_path">Config path</string>
-    <string name="status_android">Android</string>
-    <string name="status_device">Device</string>
-    <string name="status_brand">Brand</string>
     <string name="status_rom">ROM / System UI</string>
     <string name="config_saved">Configuration saved successfully!\n\nPlease reboot your device for
         changes to take effect.</string>
     <string name="fill_all_fields">Please fill in all fields</string>
     <string name="config_saved_toast">Configuration saved</string>
+    <string name="config_save_failed">Failed to save configuration</string>
+    <string name="open_settings_failed">Failed to open settings: %1$s</string>
 
     <!-- Media status reporting -->
     <string name="media_listener_label">SleepyXposed Media Listener</string>

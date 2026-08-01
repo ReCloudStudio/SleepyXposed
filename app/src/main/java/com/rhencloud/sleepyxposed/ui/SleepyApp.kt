@@ -44,15 +44,13 @@ fun SleepyApp() {
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(Tab.Overview) }
     var snapshot by remember { mutableStateOf<StatusSnapshot?>(null) }
-    // Stable colors object — avoid allocating NavigationBarItemDefaults every recomposition.
-    val navColors =
-        NavigationBarItemDefaults.colors(
-            selectedIconColor = MaterialTheme.colorScheme.primary,
-            selectedTextColor = MaterialTheme.colorScheme.primary,
-            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+    val navColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.primary,
+        selectedTextColor = MaterialTheme.colorScheme.primary,
+        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 
     fun refresh() {
         scope.launch {

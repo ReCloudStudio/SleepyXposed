@@ -95,6 +95,7 @@ object HookHeartbeat {
     fun recordPing(appContext: Context, detail: String, extras: Bundle? = null) {
         try {
             appContext
+                .createDeviceProtectedStorageContext()
                 .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putLong(KEY_LAST_SEEN_MS, System.currentTimeMillis())
@@ -120,6 +121,7 @@ object HookHeartbeat {
         if (name.isBlank()) return
         try {
             appContext
+                .createDeviceProtectedStorageContext()
                 .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putString(KEY_FRAMEWORK_NAME, name)
@@ -134,7 +136,8 @@ object HookHeartbeat {
     /** Call from the app UI process. Null until the hook has pushed framework info at least once. */
     fun frameworkInfo(context: Context): FrameworkInfo? {
         return try {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs =
+                context.createDeviceProtectedStorageContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val name = prefs.getString(KEY_FRAMEWORK_NAME, null)
             if (name.isNullOrBlank()) return null
             FrameworkInfo(
@@ -156,7 +159,8 @@ object HookHeartbeat {
     /** Milliseconds since the last heartbeat, or null if none has ever been recorded. */
     fun lastSeenMillisAgo(context: Context): Long? {
         return try {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val prefs =
+                context.createDeviceProtectedStorageContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val ts = prefs.getLong(KEY_LAST_SEEN_MS, 0L)
             if (ts <= 0L) null else (System.currentTimeMillis() - ts).coerceAtLeast(0)
         } catch (_: Exception) {

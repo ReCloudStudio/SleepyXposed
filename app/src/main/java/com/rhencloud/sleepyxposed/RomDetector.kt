@@ -1,7 +1,6 @@
 package com.rhencloud.sleepyxposed
 
 import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Build
 
 /**
@@ -65,7 +64,13 @@ object RomDetector {
                 )
             }
 
-        cached = recommendation
+        // Only memoize once we have enough signal to be confident: with a null context the
+        // detection can only fall back to system properties and would conclude STOCK, which
+        // would poison later contextual calls. A non-STOCK rom detected via properties alone is
+        // definitive, so that's safe to cache too.
+        if (context != null || rom != RomFamily.STOCK) {
+            cached = recommendation
+        }
         return recommendation
     }
 
@@ -115,7 +120,7 @@ object RomDetector {
 
     private fun hasPackage(context: Context, packageName: String): Boolean {
         return try {
-            context.packageManager.getPackageInfo(packageName, PackageManager.GET_META_DATA)
+            context.packageManager.getPackageInfo(packageName, 0)
             true
         } catch (_: Exception) {
             false

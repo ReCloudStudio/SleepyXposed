@@ -32,10 +32,6 @@
 
 # Compose / Kotlin
 -dontwarn org.jetbrains.annotations.**
--keepclassmembers class * extends android.view.View {
-    void set*(***);
-    *** get*();
-}
 
 # Keep line numbers for crash logs (small cost)
 -keepattributes SourceFile,LineNumberTable

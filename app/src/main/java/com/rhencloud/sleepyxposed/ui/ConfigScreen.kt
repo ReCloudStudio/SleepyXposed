@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -24,9 +25,12 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,51 +48,75 @@ import com.rhencloud.sleepyxposed.MediaMethod
 import com.rhencloud.sleepyxposed.R
 import com.rhencloud.sleepyxposed.RomDetector
 import com.rhencloud.sleepyxposed.SleepyConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Lightweight Material3 settings form (no Miuix preference animations). */
 @Composable
 fun ConfigScreen() {
     val context = LocalContext.current
-    val initial =
-        remember {
-            runCatching { ConfigManager.loadConfig(context) }.getOrElse { SleepyConfig() }
-        }
+    val scope = rememberCoroutineScope()
 
-    var serverUrl by remember { mutableStateOf(initial.serverUrl) }
-    var secret by remember { mutableStateOf(initial.secret) }
-    var deviceId by remember { mutableStateOf(initial.deviceId) }
-    var showName by remember { mutableStateOf(initial.showName) }
-    var enabled by remember { mutableStateOf(initial.enabled) }
-    var mediaEnabled by remember { mutableStateOf(initial.mediaEnabled) }
-    var mediaDeviceId by remember { mutableStateOf(initial.mediaDeviceId) }
-    var mediaShowName by remember { mutableStateOf(initial.mediaShowName) }
-    var mediaMethod by remember {
-        mutableStateOf(MediaMethod.fromString(initial.mediaMethod))
+    // rememberSaveable keeps the user's in-progress edits across tab switches (the screen leaves
+    // composition when the tab changes). mediaMethod is stored as its String name since the enum
+    // isn't saveable; the `initialized` flag stops the async load from clobbering those edits.
+    var serverUrl by rememberSaveable { mutableStateOf("") }
+    var secret by rememberSaveable { mutableStateOf("") }
+    var deviceId by rememberSaveable { mutableStateOf("") }
+    var showName by rememberSaveable { mutableStateOf("") }
+    var enabled by rememberSaveable { mutableStateOf(false) }
+    var mediaEnabled by rememberSaveable { mutableStateOf(false) }
+    var mediaDeviceId by rememberSaveable { mutableStateOf("") }
+    var mediaShowName by rememberSaveable { mutableStateOf("") }
+    var mediaMethodName by rememberSaveable { mutableStateOf(MediaMethod.AUTO.name) }
+    var statusMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var initialized by rememberSaveable { mutableStateOf(false) }
+
+    // Load the (disk / provider-backed) config off the main thread once, then seed the fields.
+    LaunchedEffect(Unit) {
+        if (initialized) return@LaunchedEffect
+        val loaded =
+            withContext(Dispatchers.IO) {
+                runCatching { ConfigManager.loadConfig(context) }.getOrElse { SleepyConfig() }
+            }
+        serverUrl = loaded.serverUrl
+        secret = loaded.secret
+        deviceId = loaded.deviceId
+        showName = loaded.showName
+        enabled = loaded.enabled
+        mediaEnabled = loaded.mediaEnabled
+        mediaDeviceId = loaded.mediaDeviceId
+        mediaShowName = loaded.mediaShowName
+        mediaMethodName = loaded.mediaMethod.ifBlank { MediaMethod.AUTO.name }
+        initialized = true
     }
-    var statusMessage by remember { mutableStateOf<String?>(null) }
 
-    val recommendationText =
-        remember {
-            runCatching {
-                    val recommendation = RomDetector.recommend(context)
-                    val methodLabel =
-                        when (recommendation.method) {
-                            MediaMethod.SYSTEM_HOOK ->
-                                context.getString(R.string.media_method_system_hook)
-                            MediaMethod.NOTIFICATION_LISTENER ->
-                                context.getString(R.string.media_method_notification_listener)
-                            else -> context.getString(R.string.media_method_system_hook)
-                        }
-                    context.getString(
-                        R.string.media_recommendation_format,
-                        recommendation.androidVersion,
-                        recommendation.rom.displayName,
-                        methodLabel,
-                        recommendation.reason
-                    )
-                }
-                .getOrNull()
-        }
+    var recommendationText by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        recommendationText =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                        val recommendation = RomDetector.recommend(context)
+                        val methodLabel =
+                            when (recommendation.method) {
+                                MediaMethod.SYSTEM_HOOK ->
+                                    context.getString(R.string.media_method_system_hook)
+                                MediaMethod.NOTIFICATION_LISTENER ->
+                                    context.getString(R.string.media_method_notification_listener)
+                                else -> context.getString(R.string.media_method_system_hook)
+                            }
+                        context.getString(
+                            R.string.media_recommendation_format,
+                            recommendation.androidVersion,
+                            recommendation.rom.displayName,
+                            methodLabel,
+                            recommendation.reason
+                        )
+                    }
+                    .getOrNull()
+            }
+    }
 
     val methodTitles =
         remember {
@@ -188,34 +216,37 @@ fun ConfigScreen() {
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
             )
-            MediaMethod.entries.forEach { method ->
-                val title = methodTitles[method].orEmpty()
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = mediaMethod == method,
-                                onClick = { mediaMethod = method },
-                                role = Role.RadioButton
-                            )
-                            .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(
-                        selected = mediaMethod == method,
-                        onClick = { mediaMethod = method }
-                    )
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(start = 4.dp)
-                    )
+            Column(modifier = Modifier.selectableGroup()) {
+                MediaMethod.entries.forEach { method ->
+                    val title = methodTitles[method].orEmpty()
+                    val selected = mediaMethodName == method.name
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = selected,
+                                    onClick = { mediaMethodName = method.name },
+                                    role = Role.RadioButton
+                                )
+                                .height(48.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selected,
+                            onClick = null
+                        )
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
                 }
             }
-            if (recommendationText != null) {
+            recommendationText?.let { recommendation ->
                 Text(
-                    text = recommendationText,
+                    text = recommendation,
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(vertical = 8.dp)
@@ -230,7 +261,7 @@ fun ConfigScreen() {
                     } catch (e: Exception) {
                         Toast.makeText(
                                 context,
-                                "Failed to open settings: ${e.message}",
+                                context.getString(R.string.open_settings_failed, e.message),
                                 Toast.LENGTH_SHORT
                             )
                             .show()
@@ -277,23 +308,26 @@ fun ConfigScreen() {
                         mediaEnabled = mediaEnabled,
                         mediaDeviceId = mediaDeviceId.trim(),
                         mediaShowName = mediaShowName.trim(),
-                        mediaMethod = mediaMethod.name
+                        mediaMethod = mediaMethodName
                     )
-                if (ConfigManager.saveConfig(context, config)) {
-                    statusMessage =
-                        context.getString(R.string.config_saved) +
-                            "\n\n" +
-                            ConfigManager.getConfigFilePath(context)
-                    Toast.makeText(
-                            context,
-                            context.getString(R.string.config_saved_toast),
-                            Toast.LENGTH_SHORT
-                        )
-                        .show()
-                } else {
-                    statusMessage = null
-                    Toast.makeText(context, "Failed to save configuration", Toast.LENGTH_SHORT)
-                        .show()
+                scope.launch {
+                    val saved = withContext(Dispatchers.IO) { ConfigManager.saveConfig(context, config) }
+                    if (saved) {
+                        statusMessage =
+                            context.getString(R.string.config_saved) +
+                                "\n\n" +
+                                ConfigManager.getConfigFilePath(context)
+                        Toast.makeText(
+                                context,
+                                context.getString(R.string.config_saved_toast),
+                                Toast.LENGTH_SHORT
+                            )
+                            .show()
+                    } else {
+                        statusMessage = null
+                        Toast.makeText(context, context.getString(R.string.config_save_failed), Toast.LENGTH_SHORT)
+                            .show()
+                    }
                 }
             },
             modifier =

@@ -25,6 +25,11 @@ data class SleepyConfig(
   fun hasRequiredFields(): Boolean {
     return serverUrl.isNotBlank() && secret.isNotBlank() && deviceId.isNotBlank() && showName.isNotBlank()
   }
+
+  /** Complete enough for the public JSON mirror, which deliberately excludes [secret]. */
+  fun hasRequiredPublicFields(): Boolean {
+    return serverUrl.isNotBlank() && deviceId.isNotBlank() && showName.isNotBlank()
+  }
 }
 
 /** Configuration manager for loading and saving config across app + system_server. */
@@ -87,17 +92,13 @@ object ConfigManager {
   }
 
   private fun loadConfigFromXSharedPreferencesUncached(systemContext: Context?): SleepyConfig {
-    systemContext?.let { ctx ->
-      loadViaContentProvider(ctx)?.takeIf { it.hasRequiredFields() }?.let {
-        return it
-      }
-    }
+    val provider = systemContext?.let { loadViaContentProvider(it) }
+    if (provider != null && provider.hasRequiredFields()) return provider
 
-    loadConfigFromJsonFiles(null)?.takeIf { it.hasRequiredFields() }?.let {
-      return it
-    }
+    val json = loadConfigFromJsonFiles(null)
+    if (json != null && json.hasRequiredPublicFields()) return json
 
-    return loadViaContentProvider(systemContext) ?: loadConfigFromJsonFiles(null) ?: SleepyConfig()
+    return provider ?: json ?: SleepyConfig()
   }
 
   /** Human-readable diagnostics for why system_server cannot see config. Diagnostic-only. */
@@ -107,7 +108,7 @@ object ConfigManager {
     val existing =
             getAllJsonCandidates(null).filter { it.exists() }.joinToString(",") { it.absolutePath }
     return "provider=${provider?.let { if (it.hasRequiredFields()) "ok" else "incomplete" } ?: "fail"}; " +
-            "json=${json?.let { if (it.hasRequiredFields()) "ok" else "incomplete" } ?: "fail"}; " +
+            "json=${json?.let { if (it.hasRequiredPublicFields()) "ok" else "incomplete" } ?: "fail"}; " +
             "jsonFiles=[${existing.ifBlank { "none" }}]"
   }
 
@@ -128,15 +129,17 @@ object ConfigManager {
                   return if (i >= 0 && !cursor.isNull(i)) cursor.getInt(i) != 0 else false
                 }
                 SleepyConfig(
-                        serverUrl = str("server_url"),
-                        secret = str("secret"),
-                        deviceId = str("device_id"),
-                        showName = str("show_name"),
-                        enabled = bool("enabled"),
-                        mediaEnabled = bool("media_enabled"),
-                        mediaDeviceId = str("media_device_id"),
-                        mediaShowName = str("media_show_name"),
-                        mediaMethod = str("media_method").ifBlank { MediaMethod.AUTO.name }
+                        serverUrl = str(ConfigContentProvider.COLUMN_SERVER_URL),
+                        secret = str(ConfigContentProvider.COLUMN_SECRET),
+                        deviceId = str(ConfigContentProvider.COLUMN_DEVICE_ID),
+                        showName = str(ConfigContentProvider.COLUMN_SHOW_NAME),
+                        enabled = bool(ConfigContentProvider.COLUMN_ENABLED),
+                        mediaEnabled = bool(ConfigContentProvider.COLUMN_MEDIA_ENABLED),
+                        mediaDeviceId = str(ConfigContentProvider.COLUMN_MEDIA_DEVICE_ID),
+                        mediaShowName = str(ConfigContentProvider.COLUMN_MEDIA_SHOW_NAME),
+                        mediaMethod =
+                                str(ConfigContentProvider.COLUMN_MEDIA_METHOD)
+                                        .ifBlank { MediaMethod.AUTO.name }
                 )
               }
     } catch (_: Exception) {
@@ -151,8 +154,10 @@ object ConfigManager {
     // JSON mirror for system_server (private app data is SELinux-blocked from system).
     val jsonSaved = saveConfigToJsonFiles(context, config)
 
-    // Invalidate the system-side cache immediately so a Save takes effect without waiting out
-    // the TTL window.
+    // cachedSystemConfig is a process-local static: clearing it here only invalidates the
+    // copy in THIS process (the app). system_server's own copy refreshes on its next poll once
+    // the TTL window elapses; the notifyChange below lets a system-side ContentObserver hook
+    // into that (there is currently none registered), so the TTL is the effective bound there.
     cachedSystemConfig = null
     cachedSystemConfigAt = 0L
 
@@ -224,11 +229,12 @@ object ConfigManager {
     return getPrimaryPublicConfigFile().absolutePath
   }
 
-  private fun configToJson(config: SleepyConfig): String {
+  /** [secret] is written only when [includeSecret] is true (private prefs); never to the public JSON mirror. */
+  private fun configToJson(config: SleepyConfig, includeSecret: Boolean = true): String {
     return JSONObject()
             .apply {
               put(KEY_SERVER_URL, config.serverUrl)
-              put(KEY_SECRET, config.secret)
+              if (includeSecret) put(KEY_SECRET, config.secret)
               put(KEY_DEVICE_ID, config.deviceId)
               put(KEY_SHOW_NAME, config.showName)
               put(KEY_ENABLED, config.enabled)
@@ -260,7 +266,9 @@ object ConfigManager {
   }
 
   private fun saveConfigToJsonFiles(context: Context, config: SleepyConfig): Boolean {
-    val json = configToJson(config)
+    // The public mirror never carries the secret — it authenticates device reports, so it must
+    // not be readable from a world-readable file. system_server gets it via the provider query.
+    val json = configToJson(config, includeSecret = false)
     var any = false
     for (file in getAllJsonCandidates(context)) {
       try {
@@ -284,7 +292,8 @@ object ConfigManager {
       try {
         if (!file.exists() || !file.canRead()) continue
         val config = parseConfigJson(file.readText()) ?: continue
-        if (config.hasRequiredFields()) {
+        // The public mirror has no secret; only require the fields it actually carries.
+        if (config.hasRequiredPublicFields()) {
           return config
         }
       } catch (_: Exception) {}
@@ -294,7 +303,8 @@ object ConfigManager {
 
   private fun getPrimaryPublicConfigFile(): File {
     return File(
-            "/storage/emulated/0/Android/media/$MODULE_PACKAGE_NAME/$FALLBACK_DIR/$FALLBACK_FILE_NAME"
+            Environment.getExternalStorageDirectory(),
+            "Android/media/$MODULE_PACKAGE_NAME/$FALLBACK_DIR/$FALLBACK_FILE_NAME"
     )
   }
 

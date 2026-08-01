@@ -54,7 +54,7 @@ data class StatusSnapshot(
             val model = Build.MODEL.orEmpty()
 
             return StatusSnapshot(
-                moduleHookActive = HookHeartbeat.isRecentlyActive(context),
+                moduleHookActive = HookHeartbeat.isRecentlyActive(context) || XposedProbe.isModuleActive(),
                 lastHeartbeatAgoMs = HookHeartbeat.lastSeenMillisAgo(context),
                 reportingEnabled = config.enabled,
                 mediaReportingEnabled = config.mediaEnabled,

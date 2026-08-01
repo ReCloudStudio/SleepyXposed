@@ -9,6 +9,8 @@ import android.media.session.PlaybackState
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
+import android.os.Handler
+import android.os.HandlerThread
 import java.io.IOException
 import okhttp3.Call
 import okhttp3.Callback
@@ -35,13 +37,23 @@ class MediaListenerService : NotificationListenerService() {
     private var mediaSessionManager: MediaSessionManager? = null
     private var sessionsChangedListener: MediaSessionManager.OnActiveSessionsChangedListener? = null
     private var lastStatus: String? = null
+    private var backgroundThread: HandlerThread? = null
+    private var backgroundHandler: Handler? = null
 
     override fun onListenerConnected() {
         super.onListenerConnected()
         try {
+            backgroundThread = HandlerThread(TAG).also { it.start() }
+            backgroundHandler = Handler(backgroundThread!!.looper)
+
             mediaSessionManager =
                 getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
             val componentName = ComponentName(this, MediaListenerService::class.java)
+
+            // Drop any listener registered by a previous connection so we never leak it.
+            sessionsChangedListener?.let {
+                mediaSessionManager?.removeOnActiveSessionsChangedListener(it)
+            }
 
             val listener =
                 MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
@@ -60,6 +72,9 @@ class MediaListenerService : NotificationListenerService() {
         super.onListenerDisconnected()
         sessionsChangedListener?.let { mediaSessionManager?.removeOnActiveSessionsChangedListener(it) }
         sessionsChangedListener = null
+        backgroundThread?.quitSafely()
+        backgroundThread = null
+        backgroundHandler = null
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
@@ -71,6 +86,10 @@ class MediaListenerService : NotificationListenerService() {
     }
 
     private fun handleControllers(controllers: List<MediaController>?) {
+        backgroundHandler?.post { handleControllersOnBackground(controllers) }
+    }
+
+    private fun handleControllersOnBackground(controllers: List<MediaController>?) {
         val config = ConfigManager.loadConfig(this)
         if (!config.enabled || !config.mediaEnabled) return
         if (config.mediaDeviceId.isBlank() || config.mediaShowName.isBlank()) return
@@ -87,12 +106,13 @@ class MediaListenerService : NotificationListenerService() {
 
         val status: String
         val using: Boolean
+        val metadata = playing?.metadata
         val title =
-            playing?.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }
+            metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)?.takeIf { it.isNotBlank() }
         if (playing != null && title != null) {
             val artist =
-                playing.metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
-                    ?: playing.metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST) ?: ""
+                metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                    ?: metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST) ?: ""
             status = if (artist.isNotBlank()) "♪$title - $artist" else "♪$title"
             using = true
         } else {
@@ -100,8 +120,9 @@ class MediaListenerService : NotificationListenerService() {
             using = false
         }
 
+        // Only treat the status as delivered once the server confirms it; a failed send should
+        // not suppress the next attempt of the same status.
         if (status == lastStatus) return
-        lastStatus = status
 
         try {
             SleepyApiClient.sendDeviceStatus(
@@ -121,6 +142,8 @@ class MediaListenerService : NotificationListenerService() {
                             response.use {
                                 if (!response.isSuccessful) {
                                     Log.w(TAG, "Server error: ${response.code}")
+                                } else {
+                                    lastStatus = status
                                 }
                             }
                         }

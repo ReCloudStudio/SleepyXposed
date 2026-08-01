@@ -36,19 +36,9 @@
   <string name="info_device">设备</string>
   <string name="info_system_version">系统版本</string>
   <string name="status_framework_unknown">未知 / 未检测到</string>
-  <string name="action_back">返回</string>
   <string name="status_loading">正在加载状态…</string>
-  <string name="home_section_module">模块</string>
-  <string name="home_section_runtime">运行状态</string>
-  <string name="home_section_system">系统信息</string>
-  <string name="home_section_actions">操作</string>
-  <string name="open_settings">打开配置</string>
-  <string name="open_settings_summary">服务器、设备 ID、媒体上报等</string>
-  <string name="status_module_hook">框架钩子探测</string>
   <string name="status_module_hook_hint">最近未收到钩子活动信号。请确认已在 LSPosed 中启用本模块并勾选「系统框架」作用域，然后重启设备——钩子开始正常工作后此处状态会自动更新。</string>
   <string name="status_last_heartbeat">最近一次钩子活动</string>
-  <string name="status_active">已激活</string>
-  <string name="status_inactive">未检测到</string>
   <string name="status_on">开</string>
   <string name="status_off">关</string>
   <string name="status_ok">完整</string>
@@ -56,20 +46,18 @@
   <string name="status_granted">已授权</string>
   <string name="status_not_granted">未授权</string>
   <string name="status_missing_file">文件不存在</string>
-  <string name="status_app_version">应用版本</string>
   <string name="status_reporting">应用状态上报</string>
   <string name="status_media_reporting">媒体状态上报</string>
   <string name="status_media_method">媒体获取方式</string>
   <string name="status_notification_listener">通知访问权限</string>
   <string name="status_config_complete">配置完整性</string>
   <string name="status_config_path">配置路径</string>
-  <string name="status_android">系统版本</string>
-  <string name="status_device">设备</string>
-  <string name="status_brand">品牌</string>
   <string name="status_rom">ROM / 系统 UI</string>
   <string name="config_saved">配置保存成功！\n\n请重启设备以使更改生效。</string>
   <string name="fill_all_fields">请填写所有字段</string>
   <string name="config_saved_toast">配置已保存</string>
+  <string name="config_save_failed">配置保存失败</string>
+  <string name="open_settings_failed">无法打开设置：%1$s</string>
 
   <!-- 媒体状态上报 -->
   <string name="media_listener_label">SleepyXposed 媒体监听</string>

@@ -5,8 +5,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -46,6 +44,15 @@ fun SleepyApp() {
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(Tab.Overview) }
     var snapshot by remember { mutableStateOf<StatusSnapshot?>(null) }
+    // Stable colors object — avoid allocating NavigationBarItemDefaults every recomposition.
+    val navColors =
+        NavigationBarItemDefaults.colors(
+            selectedIconColor = MaterialTheme.colorScheme.primary,
+            selectedTextColor = MaterialTheme.colorScheme.primary,
+            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
 
     fun refresh() {
         scope.launch {
@@ -56,6 +63,7 @@ fun SleepyApp() {
     DisposableEffect(lifecycleOwner) {
         val observer =
             LifecycleEventObserver { _, event ->
+                // Only refresh when returning to the activity (e.g. after system settings).
                 if (event == Lifecycle.Event.ON_RESUME) refresh()
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -75,50 +83,29 @@ fun SleepyApp() {
                     onClick = { tab = Tab.Config },
                     icon = {
                         Icon(
-                            imageVector =
-                                if (tab == Tab.Config) Icons.Filled.Settings
-                                else Icons.Outlined.Settings,
+                            imageVector = Icons.Filled.Settings,
                             contentDescription = null
                         )
                     },
                     label = { Text(stringResource(R.string.tab_config)) },
-                    colors =
-                        NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    colors = navColors
                 )
                 NavigationBarItem(
                     selected = tab == Tab.Overview,
-                    onClick = {
-                        tab = Tab.Overview
-                        refresh()
-                    },
+                    onClick = { tab = Tab.Overview },
                     icon = {
                         Icon(
-                            imageVector =
-                                if (tab == Tab.Overview) Icons.Filled.Home
-                                else Icons.Outlined.Home,
+                            imageVector = Icons.Filled.Home,
                             contentDescription = null
                         )
                     },
                     label = { Text(stringResource(R.string.tab_overview)) },
-                    colors =
-                        NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    colors = navColors
                 )
             }
         }
     ) { padding ->
-        // Only the active tab is composed — avoids keeping heavy form widgets alive on overview.
+        // Only the active tab is composed.
         Box(Modifier.padding(padding)) {
             when (tab) {
                 Tab.Overview -> OverviewScreen(snapshot = snapshot)

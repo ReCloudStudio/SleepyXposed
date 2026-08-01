@@ -1,24 +1,42 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
+# ---- SleepyXposed R8 rules ----
+# Do NOT keep the whole app package; that prevents shrinking Compose / Material.
 
-# Keep Xposed API
--keep class de.robv.android.xposed.** { *; }
+# libxposed / legacy Xposed entry (compileOnly — names kept for runtime)
+-keep class com.rhencloud.sleepyxposed.ModuleMain { *; }
+-keep class * extends io.github.libxposed.api.XposedModule { *; }
 
-# Keep our module class
--keep class com.rhencloud.sleepyxposed.** { *; }
+# Components declared in the manifest
+-keep class com.rhencloud.sleepyxposed.MainActivity { *; }
+-keep class com.rhencloud.sleepyxposed.ConfigContentProvider { *; }
+-keep class com.rhencloud.sleepyxposed.MediaListenerService { *; }
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Optional hook target for LSPosed (must keep signature)
+-keep class com.rhencloud.sleepyxposed.XposedProbe {
+    public static boolean isModuleActive();
+}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Config model used across processes / JSON
+-keepclassmembers class com.rhencloud.sleepyxposed.SleepyConfig { *; }
+-keepclassmembers class com.rhencloud.sleepyxposed.MediaMethod { *; }
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Hook / system-server logic must not be stripped (reflection + Xposed)
+-keep class com.rhencloud.sleepyxposed.ConfigManager { *; }
+-keep class com.rhencloud.sleepyxposed.ForegroundAppMonitor { *; }
+-keep class com.rhencloud.sleepyxposed.MediaStatusMonitor { *; }
+-keep class com.rhencloud.sleepyxposed.SleepyApiClient { *; }
+-keep class com.rhencloud.sleepyxposed.RomDetector { *; }
+
+# Reflection in ConfigManager (XSharedPreferences)
+-dontwarn de.robv.android.xposed.**
+-dontwarn io.github.libxposed.**
+
+# Compose / Kotlin
+-dontwarn org.jetbrains.annotations.**
+-keepclassmembers class * extends android.view.View {
+    void set*(***);
+    *** get*();
+}
+
+# Keep line numbers for crash logs (small cost)
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

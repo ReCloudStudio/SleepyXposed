@@ -26,6 +26,11 @@ android {
         versionName = "1.0"
         buildConfigField("int", "XPOSED_API", "101")
         buildConfigField("String", "MODULE_CHANNEL", "\"release\"")
+
+        // Phones only — drop x86 emulator ABIs from the APK
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
 
     signingConfigs {
@@ -40,8 +45,18 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Still shrink so debug APKs used for sideload stay small/fast.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             if (keystorePropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }
@@ -65,7 +80,16 @@ android {
     packaging {
         resources {
             merges += "META-INF/xposed/*"
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes +=
+                setOf(
+                    "/META-INF/{AL2.0,LGPL2.1}",
+                    "META-INF/*.kotlin_module",
+                    "META-INF/*.version",
+                    "META-INF/LICENSE*",
+                    "META-INF/NOTICE*",
+                    "DebugProbesKt.bin",
+                    "kotlin-tooling-metadata.json"
+                )
         }
     }
 }
@@ -79,23 +103,24 @@ kotlin {
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2025.02.00")
     implementation(composeBom)
-    androidTestImplementation(composeBom)
 
-    implementation("androidx.core:core-ktx:1.16.0")
-    implementation("androidx.activity:activity-compose:1.10.1")
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    // Prefer lighter lifecycle API used via ProcessLifecycle / Activity — compose helper is tiny
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
+
     implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.runtime:runtime")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    // IMPORTANT: do NOT add material-icons-extended (tens of MB of icon vectors in DEX)
 
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     compileOnly("io.github.libxposed:api:101.0.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-tooling-preview")
     testImplementation("junit:junit:4.13.2")
 }

@@ -1,6 +1,5 @@
 package com.rhencloud.sleepyxposed.ui
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,8 +15,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -30,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -41,18 +39,19 @@ import com.rhencloud.sleepyxposed.StatusSnapshot
 
 /**
  * HyperOShape-style overview: large title, solid status banner, simple key/value card.
- * No heavy preference widgets — keeps scroll cheap.
+ * Icons use material-icons-core only (filled) to avoid multi‑MB icons-extended DEX.
  */
 @Composable
 fun OverviewScreen(snapshot: StatusSnapshot?) {
     var showMore by remember { mutableStateOf(false) }
+    // Single shared scroll state; no nested scrollables on this screen.
     val scroll = rememberScrollState()
 
     Column(
         modifier =
             Modifier
                 .fillMaxSize()
-                .verticalScroll(scroll)
+                .verticalScroll(scroll, enabled = true)
                 .padding(horizontal = 20.dp)
                 .padding(top = 8.dp, bottom = 24.dp)
     ) {
@@ -97,7 +96,7 @@ private fun StatusBanner(data: StatusSnapshot) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                imageVector = if (active) Icons.Filled.CheckCircle else Icons.Outlined.Cancel,
+                imageVector = if (active) Icons.Filled.Check else Icons.Filled.Close,
                 contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.size(28.dp)
@@ -164,63 +163,62 @@ private fun InfoCard(data: StatusSnapshot, showMore: Boolean, onToggleMore: () -
                 value = data.systemLine
             )
 
-            AnimatedVisibility(visible = showMore) {
-                Column {
+            // No AnimatedVisibility — animation during expand was extra cost; layout is the same.
+            if (showMore) {
+                InfoItem(
+                    label = stringResource(R.string.status_rom),
+                    value = data.romFamily
+                )
+                InfoItem(
+                    label = stringResource(R.string.status_reporting),
+                    value =
+                        if (data.reportingEnabled) stringResource(R.string.status_on)
+                        else stringResource(R.string.status_off)
+                )
+                InfoItem(
+                    label = stringResource(R.string.status_media_reporting),
+                    value =
+                        if (data.mediaReportingEnabled) stringResource(R.string.status_on)
+                        else stringResource(R.string.status_off)
+                )
+                InfoItem(
+                    label = stringResource(R.string.status_media_method),
+                    value = data.mediaMethod
+                )
+                InfoItem(
+                    label = stringResource(R.string.status_notification_listener),
+                    value =
+                        if (data.notificationListenerEnabled)
+                            stringResource(R.string.status_granted)
+                        else stringResource(R.string.status_not_granted)
+                )
+                InfoItem(
+                    label = stringResource(R.string.status_config_complete),
+                    value =
+                        if (data.configLooksComplete) stringResource(R.string.status_ok)
+                        else stringResource(R.string.status_incomplete)
+                )
+                if (data.configPath.isNotBlank()) {
                     InfoItem(
-                        label = stringResource(R.string.status_rom),
-                        value = data.romFamily
-                    )
-                    InfoItem(
-                        label = stringResource(R.string.status_reporting),
+                        label = stringResource(R.string.status_config_path),
                         value =
-                            if (data.reportingEnabled) stringResource(R.string.status_on)
-                            else stringResource(R.string.status_off)
-                    )
-                    InfoItem(
-                        label = stringResource(R.string.status_media_reporting),
-                        value =
-                            if (data.mediaReportingEnabled) stringResource(R.string.status_on)
-                            else stringResource(R.string.status_off)
-                    )
-                    InfoItem(
-                        label = stringResource(R.string.status_media_method),
-                        value = data.mediaMethod
-                    )
-                    InfoItem(
-                        label = stringResource(R.string.status_notification_listener),
-                        value =
-                            if (data.notificationListenerEnabled)
-                                stringResource(R.string.status_granted)
-                            else stringResource(R.string.status_not_granted)
-                    )
-                    InfoItem(
-                        label = stringResource(R.string.status_config_complete),
-                        value =
-                            if (data.configLooksComplete) stringResource(R.string.status_ok)
-                            else stringResource(R.string.status_incomplete)
-                    )
-                    if (data.configPath.isNotBlank()) {
-                        InfoItem(
-                            label = stringResource(R.string.status_config_path),
-                            value =
-                                data.configPath +
-                                    if (data.configPathExists) ""
-                                    else " (${stringResource(R.string.status_missing_file)})"
-                        )
-                    }
-                    if (data.recommendationReason.isNotBlank()) {
-                        InfoItem(
-                            label = stringResource(R.string.status_recommended_method),
-                            value = "${data.recommendedMethod}\n${data.recommendationReason}"
-                        )
-                    }
-                    Text(
-                        text = stringResource(R.string.status_module_hook_hint),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                            data.configPath +
+                                if (data.configPathExists) ""
+                                else " (${stringResource(R.string.status_missing_file)})"
                     )
                 }
+                if (data.recommendationReason.isNotBlank()) {
+                    InfoItem(
+                        label = stringResource(R.string.status_recommended_method),
+                        value = "${data.recommendedMethod}\n${data.recommendationReason}"
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.status_module_hook_hint),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                )
             }
 
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {

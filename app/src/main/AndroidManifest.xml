@@ -9,34 +9,24 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="true"
+        android:hardwareAccelerated="true"
         android:theme="@style/Theme.SleepyXposed">
 
         <uses-library
             android:name="de.robv.android.xposed"
             android:required="false" />
 
-        <!-- Home dashboard (module status + system info) -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.SleepyXposed"
-            android:hardwareAccelerated="true">
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- Configuration form (separate process composition tree for performance) -->
-        <activity
-            android:name=".SettingsActivity"
-            android:exported="false"
-            android:theme="@style/Theme.SleepyXposed"
-            android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize"
-            android:parentActivityName=".MainActivity" />
-
-        <!-- Notification listener used for the media-status "Notification Listener" method -->
         <service
             android:name=".MediaListenerService"
             android:label="@string/media_listener_label"
@@ -47,11 +37,6 @@
             </intent-filter>
         </service>
 
-        <!--
-          Exposes config to system_server. Private SharedPreferences are SELinux-blocked from
-          system_server under modern ROMs / libxposed API 101; the provider is queried with the
-          module app identity so prefs load correctly. Only system UID may read (enforced in code).
-        -->
         <provider
             android:name=".ConfigContentProvider"
             android:authorities="com.rhencloud.sleepyxposed.config"
@@ -60,7 +45,6 @@
             android:directBootAware="true"
             android:grantUriPermissions="false" />
 
-        <!-- Xposed Module Metadata -->
         <meta-data
             android:name="xposedmodule"
             android:value="true" />

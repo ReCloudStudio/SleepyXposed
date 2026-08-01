@@ -4,17 +4,19 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.rhencloud.sleepyxposed.ui.HomeScreen
-import com.rhencloud.sleepyxposed.ui.SleepyMiuixTheme
+import androidx.core.view.WindowCompat
+import com.rhencloud.sleepyxposed.ui.SleepyApp
+import com.rhencloud.sleepyxposed.ui.SleepyTheme
 
-/** Lightweight entry: dashboard only. Configuration lives in [SettingsActivity]. */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars =
+            true
         setContent {
-            SleepyMiuixTheme {
-                HomeScreen()
+            SleepyTheme {
+                SleepyApp()
             }
         }
     }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- HyperOShape-inspired light shell -->
+    <color name="sleepy_background">#FFF5F6F8</color>
+    <color name="sleepy_surface">#FFFFFFFF</color>
+    <color name="sleepy_on_surface">#FF1C1B1F</color>
+    <color name="sleepy_on_surface_variant">#FF6B7280</color>
+    <color name="sleepy_outline">#FFE5E7EB</color>
+    <color name="sleepy_status_active">#FF0D5C63</color>
+    <color name="sleepy_status_inactive">#FF6B7280</color>
+    <color name="sleepy_on_status">#FFFFFFFF</color>
+    <color name="sleepy_primary">#FF0D5C63</color>
+    <color name="sleepy_nav_selected_container">#FFD6EAF0</color>
+    <color name="sleepy_nav_selected">#FF0D5C63</color>
+    <color name="sleepy_link">#FF0A7EA4</color>
+</resources>

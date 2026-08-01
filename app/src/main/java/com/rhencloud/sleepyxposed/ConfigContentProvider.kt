@@ -34,7 +34,7 @@ class ConfigContentProvider : ContentProvider() {
     val config = ConfigManager.loadConfig(ctx)
     val cursor = MatrixCursor(COLUMNS)
     cursor.addRow(
-            arrayOf(
+            arrayOf<Any>(
                     config.serverUrl,
                     config.secret,
                     config.deviceId,

@@ -20,6 +20,7 @@
   <string name="display_name_hint">在 Sleepy 页面显示的名称</string>
   <string name="enable_reporting">启用上报</string>
   <string name="save_configuration">保存配置</string>
+  <string name="instructions_title">设置说明</string>
   <string name="config_saved">配置保存成功！\n\n请重启设备以使更改生效。</string>
   <string name="fill_all_fields">请填写所有字段</string>
   <string name="config_saved_toast">配置已保存</string>

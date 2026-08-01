@@ -22,6 +22,7 @@
     <string name="display_name_hint">Name shown on Sleepy page</string>
     <string name="enable_reporting">Enable Reporting</string>
     <string name="save_configuration">Save Configuration</string>
+    <string name="instructions_title">Setup notes</string>
     <string name="config_saved">Configuration saved successfully!\n\nPlease reboot your device for
         changes to take effect.</string>
     <string name="fill_all_fields">Please fill in all fields</string>

@@ -1,4 +1,4 @@
-package com.rhencloud.sleepyxposed.ui
+package io.github.recloudstudio.sleepyxposed.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
@@ -26,8 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.rhencloud.sleepyxposed.R
-import com.rhencloud.sleepyxposed.StatusSnapshot
+import io.github.recloudstudio.sleepyxposed.R
+import io.github.recloudstudio.sleepyxposed.StatusSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

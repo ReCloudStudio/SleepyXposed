@@ -1,4 +1,4 @@
-package com.rhencloud.sleepyxposed
+package io.github.recloudstudio.sleepyxposed
 
 import android.content.Context
 import android.os.Build

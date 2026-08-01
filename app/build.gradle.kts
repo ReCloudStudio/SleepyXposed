@@ -15,15 +15,15 @@ val keystoreProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.rhencloud.sleepyxposed"
+    namespace = "io.github.recloudstudio.sleepyxposed"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.rhencloud.sleepyxposed"
+        applicationId = "io.github.recloudstudio.sleepyxposed"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
         buildConfigField("int", "XPOSED_API", "101")
         buildConfigField("String", "MODULE_CHANNEL", "\"release\"")
 
@@ -119,6 +119,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     compileOnly("io.github.libxposed:api:101.0.1")
+    compileOnly("de.robv.android.xposed:api:82")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-tooling-preview")

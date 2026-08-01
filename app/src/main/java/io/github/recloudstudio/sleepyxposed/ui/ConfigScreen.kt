@@ -1,4 +1,4 @@
-package com.rhencloud.sleepyxposed.ui
+package io.github.recloudstudio.sleepyxposed.ui
 
 import android.content.Intent
 import android.provider.Settings
@@ -43,11 +43,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rhencloud.sleepyxposed.ConfigManager
-import com.rhencloud.sleepyxposed.MediaMethod
-import com.rhencloud.sleepyxposed.R
-import com.rhencloud.sleepyxposed.RomDetector
-import com.rhencloud.sleepyxposed.SleepyConfig
+import io.github.recloudstudio.sleepyxposed.ConfigManager
+import io.github.recloudstudio.sleepyxposed.MediaMethod
+import io.github.recloudstudio.sleepyxposed.R
+import io.github.recloudstudio.sleepyxposed.RomDetector
+import io.github.recloudstudio.sleepyxposed.SleepyConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

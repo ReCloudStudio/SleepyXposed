@@ -1,4 +1,4 @@
-package com.rhencloud.sleepyxposed
+package io.github.recloudstudio.sleepyxposed
 
 import android.content.Context
 import android.os.Environment
@@ -35,7 +35,7 @@ data class SleepyConfig(
 /** Configuration manager for loading and saving config across app + system_server. */
 object ConfigManager {
   private const val PREF_FILE_NAME = "sleepy_config"
-  private const val MODULE_PACKAGE_NAME = "com.rhencloud.sleepyxposed"
+  private const val MODULE_PACKAGE_NAME = "io.github.recloudstudio.sleepyxposed"
   private const val KEY_SERVER_URL = "server_url"
   private const val KEY_SECRET = "secret"
   private const val KEY_DEVICE_ID = "device_id"
@@ -98,6 +98,9 @@ object ConfigManager {
     val json = loadConfigFromJsonFiles(null)
     if (json != null && json.hasRequiredPublicFields()) return json
 
+    loadViaLegacyXSharedPreferences()?.takeIf { it.hasRequiredFields() }?.let { return it }
+    loadConfigFromPrefsXmlFiles()?.let { return it }
+
     return provider ?: json ?: SleepyConfig()
   }
 
@@ -105,10 +108,14 @@ object ConfigManager {
   fun describeLoadSources(systemContext: Context?): String {
     val provider = runCatching { loadViaContentProvider(systemContext) }.getOrNull()
     val json = runCatching { loadConfigFromJsonFiles(null) }.getOrNull()
+    val xsp = runCatching { loadViaLegacyXSharedPreferences() }.getOrNull()
+    val xml = runCatching { loadConfigFromPrefsXmlFiles() }.getOrNull()
     val existing =
             getAllJsonCandidates(null).filter { it.exists() }.joinToString(",") { it.absolutePath }
     return "provider=${provider?.let { if (it.hasRequiredFields()) "ok" else "incomplete" } ?: "fail"}; " +
             "json=${json?.let { if (it.hasRequiredPublicFields()) "ok" else "incomplete" } ?: "fail"}; " +
+            "xsp=${xsp?.let { if (it.hasRequiredFields()) "ok" else "incomplete" } ?: "fail"}; " +
+            "prefsXml=${xml?.let { if (it.hasRequiredFields()) "ok" else "incomplete" } ?: "fail"}; " +
             "jsonFiles=[${existing.ifBlank { "none" }}]"
   }
 
@@ -145,6 +152,98 @@ object ConfigManager {
     } catch (_: Exception) {
       null
     }
+  }
+
+  /** Legacy [de.robv.android.xposed.XSharedPreferences] read for older ROMs where the provider cannot be reached. */
+  private fun loadViaLegacyXSharedPreferences(): SleepyConfig? {
+    return try {
+      val clazz = Class.forName("de.robv.android.xposed.XSharedPreferences")
+      val constructor = clazz.getConstructor(String::class.java, String::class.java)
+      val pref = constructor.newInstance(MODULE_PACKAGE_NAME, PREF_FILE_NAME)
+
+      clazz.getMethod("reload").invoke(pref)
+
+      val getString = clazz.getMethod("getString", String::class.java, String::class.java)
+      val getBoolean =
+              clazz.getMethod("getBoolean", String::class.java, Boolean::class.javaPrimitiveType)
+
+      SleepyConfig(
+              serverUrl = (getString.invoke(pref, KEY_SERVER_URL, "") as? String) ?: "",
+              secret = (getString.invoke(pref, KEY_SECRET, "") as? String) ?: "",
+              deviceId = (getString.invoke(pref, KEY_DEVICE_ID, "") as? String) ?: "",
+              showName = (getString.invoke(pref, KEY_SHOW_NAME, "") as? String) ?: "",
+              enabled = (getBoolean.invoke(pref, KEY_ENABLED, false) as? Boolean) ?: false,
+              mediaEnabled =
+                      (getBoolean.invoke(pref, KEY_MEDIA_ENABLED, false) as? Boolean) ?: false,
+              mediaDeviceId = (getString.invoke(pref, KEY_MEDIA_DEVICE_ID, "") as? String) ?: "",
+              mediaShowName = (getString.invoke(pref, KEY_MEDIA_SHOW_NAME, "") as? String) ?: "",
+              mediaMethod =
+                      (getString.invoke(pref, KEY_MEDIA_METHOD, MediaMethod.AUTO.name) as? String)
+                              ?: MediaMethod.AUTO.name
+      )
+    } catch (_: Exception) {
+      null
+    }
+  }
+
+  /** Parse the app's SharedPreferences XML directly when other paths are SELinux-blocked. */
+  private fun loadConfigFromPrefsXmlFiles(): SleepyConfig? {
+    for (file in getModulePrefsXmlCandidates()) {
+      try {
+        if (!file.exists() || !file.canRead()) continue
+        parseSharedPreferencesXml(file.readText())?.let { config ->
+          if (config.hasRequiredFields() || config.mediaEnabled) {
+            return config
+          }
+        }
+      } catch (_: Exception) {}
+    }
+    return null
+  }
+
+  private fun getModulePrefsXmlCandidates(): List<File> {
+    val fileName = "$PREF_FILE_NAME.xml"
+    return listOf(
+            File("/data/user_de/0/$MODULE_PACKAGE_NAME/shared_prefs/$fileName"),
+            File("/data/user/0/$MODULE_PACKAGE_NAME/shared_prefs/$fileName"),
+            File("/data/data/$MODULE_PACKAGE_NAME/shared_prefs/$fileName")
+    )
+  }
+
+  private fun parseSharedPreferencesXml(xml: String): SleepyConfig? {
+    if (!xml.contains("<map")) return null
+
+    fun stringValue(key: String): String {
+      val re =
+              Regex(
+                      """<string\s+name="$key">(.*?)</string>""",
+                      setOf(RegexOption.DOT_MATCHES_ALL)
+              )
+      val raw = re.find(xml)?.groupValues?.getOrNull(1) ?: return ""
+      return raw
+              .replace("&lt;", "<")
+              .replace("&gt;", ">")
+              .replace("&amp;", "&")
+              .replace("&quot;", "\"")
+              .replace("&apos;", "'")
+    }
+
+    fun booleanValue(key: String, default: Boolean = false): Boolean {
+      val re = Regex("""<boolean\s+name="$key"\s+value="(true|false)"\s*/>""")
+      return re.find(xml)?.groupValues?.getOrNull(1)?.toBoolean() ?: default
+    }
+
+    return SleepyConfig(
+            serverUrl = stringValue(KEY_SERVER_URL),
+            secret = stringValue(KEY_SECRET),
+            deviceId = stringValue(KEY_DEVICE_ID),
+            showName = stringValue(KEY_SHOW_NAME),
+            enabled = booleanValue(KEY_ENABLED, false),
+            mediaEnabled = booleanValue(KEY_MEDIA_ENABLED, false),
+            mediaDeviceId = stringValue(KEY_MEDIA_DEVICE_ID),
+            mediaShowName = stringValue(KEY_MEDIA_SHOW_NAME),
+            mediaMethod = stringValue(KEY_MEDIA_METHOD).ifBlank { MediaMethod.AUTO.name }
+    )
   }
 
   /** Save configuration in module app process */

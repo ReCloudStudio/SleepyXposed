@@ -1,4 +1,4 @@
-package com.rhencloud.sleepyxposed.ui
+package io.github.recloudstudio.sleepyxposed.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
@@ -34,8 +34,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rhencloud.sleepyxposed.R
-import com.rhencloud.sleepyxposed.StatusSnapshot
+import io.github.recloudstudio.sleepyxposed.R
+import io.github.recloudstudio.sleepyxposed.StatusSnapshot
 
 /**
  * HyperOShape-style overview: large title, solid status banner, simple key/value card.

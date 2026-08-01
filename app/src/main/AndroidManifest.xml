@@ -51,7 +51,7 @@
              system UID or our own process, and heartbeat calls require system_server only. -->
         <provider
             android:name=".ConfigContentProvider"
-            android:authorities="com.rhencloud.sleepyxposed.config"
+            android:authorities="io.github.recloudstudio.sleepyxposed.config"
             android:exported="true"
             android:enabled="true"
             android:directBootAware="true"

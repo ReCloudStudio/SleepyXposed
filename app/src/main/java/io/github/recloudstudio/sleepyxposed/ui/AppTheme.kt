@@ -1,4 +1,4 @@
-package com.rhencloud.sleepyxposed.ui
+package io.github.recloudstudio.sleepyxposed.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme

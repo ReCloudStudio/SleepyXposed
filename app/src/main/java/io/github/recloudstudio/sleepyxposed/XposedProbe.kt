@@ -1,4 +1,4 @@
-package com.rhencloud.sleepyxposed
+package io.github.recloudstudio.sleepyxposed
 
 /**
  * Application-process probe for module activation.

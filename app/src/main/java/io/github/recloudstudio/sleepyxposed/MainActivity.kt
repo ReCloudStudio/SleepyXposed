@@ -1,11 +1,11 @@
-package com.rhencloud.sleepyxposed
+package io.github.recloudstudio.sleepyxposed
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.rhencloud.sleepyxposed.ui.SleepyApp
-import com.rhencloud.sleepyxposed.ui.SleepyTheme
+import io.github.recloudstudio.sleepyxposed.ui.SleepyApp
+import io.github.recloudstudio.sleepyxposed.ui.SleepyTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

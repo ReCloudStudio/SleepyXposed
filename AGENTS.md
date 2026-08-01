@@ -4,7 +4,7 @@ Xposed 模块，监控 Android 前台应用切换并上报到 Sleepy 服务器�
 
 ## 关键架构
 
-- **包名**: `io.github.recloudstudio.sleepyxposed`，作用域必须锁定 `android`（系统框架）
+- **包名**: `io.github.recloudstudio.sleepyxposed`，作用域必须锁定 `system`（系统框架，LSPosed 1.9.1+ 现代模块语义；`scope.list` 中 `android` 指向 Android系统 app 而非系统框架）
 - **双入口**: `ModuleMain`（现代 LibXposed API）和 `LegacyEntry`（传统 XposedBridge API），均 hook `ActivityRecord.completeResumeLocked`/`completeResume`
 - **配置链**: `MainActivity`（UI）→ `ConfigManager`（SharedPreferences + JSON 文件回退）→ `ForegroundAppMonitor`（XSharedPreferences/远程 Prefs 读取）
 - **ConfigManager** 将配置同步写入 credential 和 device-protected 存储，并通过 `makePrefsWorldReadable()` 暴露给系统进程

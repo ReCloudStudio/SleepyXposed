@@ -45,7 +45,8 @@
   <string name="open_settings">打开配置</string>
   <string name="open_settings_summary">服务器、设备 ID、媒体上报等</string>
   <string name="status_module_hook">框架钩子探测</string>
-  <string name="status_module_hook_hint">默认作用域为系统框架。应用进程通常探测不到钩子，除非把本应用也加入作用域。请在 LSPosed 中启用本模块并勾选「系统框架」。</string>
+  <string name="status_module_hook_hint">最近未收到钩子活动信号。请确认已在 LSPosed 中启用本模块并勾选「系统框架」作用域，然后重启设备——钩子开始正常工作后此处状态会自动更新。</string>
+  <string name="status_last_heartbeat">最近一次钩子活动</string>
   <string name="status_active">已激活</string>
   <string name="status_inactive">未检测到</string>
   <string name="status_on">开</string>

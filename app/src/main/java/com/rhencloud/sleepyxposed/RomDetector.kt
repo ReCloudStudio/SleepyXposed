@@ -34,27 +34,39 @@ object RomDetector {
         val reason: String
     )
 
+    // ROM identity and Android version are fixed for the process lifetime (a ROM/OS update
+    // requires a reboot, which restarts every process that would hold this cache). Detection
+    // involves several reflection + PackageManager calls, so memoizing avoids redoing that work
+    // on every poll cycle (previously recomputed every 8s from MediaStatusMonitor).
+    @Volatile private var cached: Recommendation? = null
+
     /** Recommend a concrete method (never [MediaMethod.AUTO] or [MediaMethod.DUMPSYS_SHELL]). */
     fun recommend(context: Context?): Recommendation {
+        cached?.let { return it }
+
         val rom = detectRom(context)
         val versionName = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
 
-        return if (rom == RomFamily.STOCK) {
-            Recommendation(
-                method = MediaMethod.SYSTEM_HOOK,
-                rom = rom,
-                androidVersion = versionName,
-                reason = "检测到接近原生的系统环境，系统钩子方式无需额外授权，兼容性最好"
-            )
-        } else {
-            Recommendation(
-                method = MediaMethod.NOTIFICATION_LISTENER,
-                rom = rom,
-                androidVersion = versionName,
-                reason = "检测到定制系统「${rom.displayName}」，其后台管控可能影响系统钩子的稳定性，" +
-                    "推荐使用通知监听方式（需在本应用内手动授权一次通知访问权限）"
-            )
-        }
+        val recommendation =
+            if (rom == RomFamily.STOCK) {
+                Recommendation(
+                    method = MediaMethod.SYSTEM_HOOK,
+                    rom = rom,
+                    androidVersion = versionName,
+                    reason = "检测到接近原生的系统环境，系统钩子方式无需额外授权，兼容性最好"
+                )
+            } else {
+                Recommendation(
+                    method = MediaMethod.NOTIFICATION_LISTENER,
+                    rom = rom,
+                    androidVersion = versionName,
+                    reason = "检测到定制系统「${rom.displayName}」，其后台管控可能影响系统钩子的稳定性，" +
+                        "推荐使用通知监听方式（需在本应用内手动授权一次通知访问权限）"
+                )
+            }
+
+        cached = recommendation
+        return recommendation
     }
 
     /** Resolve [MediaMethod.AUTO] to a concrete method; other values pass through unchanged. */

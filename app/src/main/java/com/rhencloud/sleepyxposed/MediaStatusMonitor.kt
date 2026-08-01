@@ -45,6 +45,7 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
     private var pollRunnable: Runnable? = null
     private var lastStatus: String? = null
     private var lastSkipReason: String? = null
+    private var mediaSessionManager: MediaSessionManager? = null
 
     fun initializeForSystemServer(classLoader: ClassLoader) {
         log("$TAG: Initializing media status monitor...")
@@ -87,6 +88,10 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
     }
 
     private fun poll() {
+        // Throttled internally — proves the media hook side is alive regardless of whether
+        // media reporting itself is enabled/configured below.
+        HookHeartbeat.touch()
+
         val config = ConfigManager.loadConfigFromXSharedPreferences(systemContext)
         if (!config.enabled) {
             return
@@ -95,13 +100,13 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
             return
         }
         if (config.mediaDeviceId.isBlank() || config.mediaShowName.isBlank()) {
-            logSkipOnce("media device id / show name empty")
+            logSkipOnce("media device id / show name empty") { "media device id / show name empty" }
             return
         }
         if (config.serverUrl.isBlank() || config.secret.isBlank()) {
-            logSkipOnce(
+            logSkipOnce("server url / secret empty") {
                 "server url / secret empty — ${ConfigManager.describeLoadSources(systemContext)}"
-            )
+            }
             return
         }
         lastSkipReason = null
@@ -159,17 +164,19 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
         }
     }
 
-    private fun logSkipOnce(reason: String) {
-        if (lastSkipReason == reason) return
-        lastSkipReason = reason
-        log("$TAG: Media report skipped: $reason")
+    private fun logSkipOnce(reasonKey: String, message: () -> String) {
+        if (lastSkipReason == reasonKey) return
+        lastSkipReason = reasonKey
+        log("$TAG: Media report skipped: ${message()}")
     }
 
     private fun readViaMediaSessionManager(): MediaInfo? {
         val context = systemContext ?: return null
         return try {
             val manager =
-                context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager
+                mediaSessionManager
+                    ?: (context.getSystemService(Context.MEDIA_SESSION_SERVICE) as? MediaSessionManager)
+                        ?.also { mediaSessionManager = it }
                     ?: return null
             val sessions = manager.getActiveSessions(null)
             val playing =

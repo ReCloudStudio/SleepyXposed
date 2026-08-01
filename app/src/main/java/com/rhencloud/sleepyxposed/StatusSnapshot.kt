@@ -10,6 +10,7 @@ import java.io.File
 /** Immutable dashboard snapshot — no Compose types. */
 data class StatusSnapshot(
     val moduleHookActive: Boolean,
+    val lastHeartbeatAgoMs: Long?,
     val reportingEnabled: Boolean,
     val mediaReportingEnabled: Boolean,
     val mediaMethod: String,
@@ -70,7 +71,8 @@ data class StatusSnapshot(
             val model = Build.MODEL.orEmpty()
 
             return StatusSnapshot(
-                moduleHookActive = XposedProbe.isModuleActive(),
+                moduleHookActive = HookHeartbeat.isRecentlyActive(),
+                lastHeartbeatAgoMs = HookHeartbeat.lastSeenMillisAgo(),
                 reportingEnabled = config.enabled,
                 mediaReportingEnabled = config.mediaEnabled,
                 mediaMethod = methodLabel,
@@ -198,11 +200,4 @@ data class StatusSnapshot(
             }
         }
     }
-}
-
-private fun SleepyConfig.hasRequiredFields(): Boolean {
-    return serverUrl.isNotBlank() &&
-        secret.isNotBlank() &&
-        deviceId.isNotBlank() &&
-        showName.isNotBlank()
 }

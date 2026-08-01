@@ -166,6 +166,10 @@ private fun InfoCard(data: StatusSnapshot, showMore: Boolean, onToggleMore: () -
             // No AnimatedVisibility — animation during expand was extra cost; layout is the same.
             if (showMore) {
                 InfoItem(
+                    label = stringResource(R.string.status_last_heartbeat),
+                    value = formatHeartbeatAge(data.lastHeartbeatAgoMs)
+                )
+                InfoItem(
                     label = stringResource(R.string.status_rom),
                     value = data.romFamily
                 )
@@ -213,12 +217,14 @@ private fun InfoCard(data: StatusSnapshot, showMore: Boolean, onToggleMore: () -
                         value = "${data.recommendedMethod}\n${data.recommendationReason}"
                     )
                 }
-                Text(
-                    text = stringResource(R.string.status_module_hook_hint),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
-                )
+                if (!data.moduleHookActive) {
+                    Text(
+                        text = stringResource(R.string.status_module_hook_hint),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                    )
+                }
             }
 
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
@@ -257,5 +263,16 @@ private fun InfoItem(label: String, value: String) {
             fontWeight = FontWeight.Normal,
             lineHeight = 22.sp
         )
+    }
+}
+
+/** "12s ago" / "3m ago" style summary; null/negative means we've never heard from the hook. */
+private fun formatHeartbeatAge(agoMs: Long?): String {
+    if (agoMs == null) return "—"
+    val seconds = agoMs / 1000
+    return when {
+        seconds < 60 -> "${seconds}s"
+        seconds < 3600 -> "${seconds / 60}m"
+        else -> "${seconds / 3600}h"
     }
 }

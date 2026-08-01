@@ -106,7 +106,7 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
                 registerLockScreenReceiver()
                 // Prove the hook is alive as soon as bootstrap succeeds, even before the first
                 // foreground-app switch happens.
-                HookHeartbeat.touch("bootstrap")
+                HookHeartbeat.ping(systemContext, "bootstrap")
             }
         } catch (e: Exception) {
             log("$TAG: Failed to get system context: ${e.message}")
@@ -143,7 +143,7 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
                 currentForegroundPackage = packageName
                 currentForegroundActivity = activityName
                 // Throttled internally — cheap to call on every switch.
-                HookHeartbeat.touch(packageName)
+                HookHeartbeat.ping(systemContext, packageName)
 
                 if (packageName != lastForegroundPackage) {
                     lastForegroundPackage = packageName

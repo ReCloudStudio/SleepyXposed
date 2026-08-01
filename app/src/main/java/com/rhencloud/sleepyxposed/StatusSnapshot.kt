@@ -71,8 +71,8 @@ data class StatusSnapshot(
             val model = Build.MODEL.orEmpty()
 
             return StatusSnapshot(
-                moduleHookActive = HookHeartbeat.isRecentlyActive(),
-                lastHeartbeatAgoMs = HookHeartbeat.lastSeenMillisAgo(),
+                moduleHookActive = HookHeartbeat.isRecentlyActive(context),
+                lastHeartbeatAgoMs = HookHeartbeat.lastSeenMillisAgo(context),
                 reportingEnabled = config.enabled,
                 mediaReportingEnabled = config.mediaEnabled,
                 mediaMethod = methodLabel,

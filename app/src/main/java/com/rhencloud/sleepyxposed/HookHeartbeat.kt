@@ -1,68 +1,92 @@
 package com.rhencloud.sleepyxposed
 
+import android.content.Context
 import android.os.SystemClock
-import java.io.File
 
 /**
  * Liveness signal written by the system_server-side hooks and read by the app UI to answer
  * "is the Xposed hook actually running right now".
  *
- * A naive in-process activation probe cannot answer this: with the module's default LSPosed scope of `android`
- * (system_server only), the app's own process is never touched by a hook, so a static
- * in-process probe method has nothing to flip it to `true` and always reads `false` — which is
- * exactly the "一直显示未检测到" (always shows "not detected") symptom, even while the
- * system_server hook is working and reporting normally.
+ * A naive in-process activation probe cannot answer this: with the module's default LSPosed
+ * scope of `android` (system_server only), the app's own process is never touched by a hook, so
+ * a static in-process probe method has nothing to flip it to `true` and always reads `false`.
  *
- * Instead, [ForegroundAppMonitor] and [MediaStatusMonitor] each call [touch] whenever they
- * demonstrably run inside system_server (hook installed, foreground switch observed, poll
- * executed). That timestamp is written to a small file in the same public directory already used
- * for [ConfigManager]'s JSON config mirror — a location already proven reachable from both
- * system_server and the app process. The app UI then just checks whether that timestamp is
- * recent via [isRecentlyActive].
+ * A first version of this fix had system_server write a small file directly onto external
+ * storage. That looked right (the same directory is already used for [ConfigManager]'s JSON
+ * config mirror, which system_server reads fine) but silently failed: the directory was only
+ * ever `chmod`-ed readable+executable for other UIDs, never writable, and even with correct bits
+ * modern external storage is FUSE-emulated, where cross-UID *writes* into another app's
+ * package-specific directory aren't reliably honored by raw POSIX permissions the way *reads*
+ * are. Reads kept working (hence config/status reporting was fine); writes from system_server
+ * never landed, so the heartbeat file was never created.
+ *
+ * This version instead reuses [ConfigContentProvider]'s Binder channel — the same one config
+ * queries already go through successfully — by calling it with [ConfigContentProvider.METHOD_HEARTBEAT].
+ * The provider runs *inside the app's own process*, so [recordPing] just writes to the app's own
+ * private [android.content.SharedPreferences]: no cross-UID filesystem access at all, so nothing
+ * for storage sandboxing to block.
  */
 object HookHeartbeat {
-    private const val FILE_NAME = "heartbeat.txt"
+    private const val PREFS_NAME = "sleepy_heartbeat"
+    private const val KEY_LAST_SEEN_MS = "last_seen_ms"
+    private const val KEY_LAST_DETAIL = "last_detail"
 
-    /** Don't write on every single call (e.g. every foreground-app switch) — only this often. */
-    private const val WRITE_THROTTLE_MS = 30_000L
+    /** Don't ping on every single call (e.g. every foreground-app switch) — only this often. */
+    private const val PING_THROTTLE_MS = 30_000L
 
     /** UI treats the hook as active if it has heard from it within this window. */
     private const val FRESHNESS_WINDOW_MS = 90_000L
 
-    @Volatile private var lastWriteAtElapsed: Long = 0L
+    @Volatile private var lastPingAtElapsed: Long = 0L
 
-    private fun file(): File = File(ConfigManager.getPrimaryPublicDir(), FILE_NAME)
-
-    /** Call from system_server-side code whenever a hook demonstrably executes. Cheap: throttled. */
-    fun touch(detail: String = "") {
+    /**
+     * Call from system_server-side code (via [systemContext]) whenever a hook demonstrably
+     * executes. Cheap: throttled, and the actual write happens in the app process via IPC.
+     */
+    fun ping(systemContext: Context?, detail: String = "") {
+        if (systemContext == null) return
         val now = SystemClock.elapsedRealtime()
-        if (now - lastWriteAtElapsed < WRITE_THROTTLE_MS) return
-        lastWriteAtElapsed = now
+        if (now - lastPingAtElapsed < PING_THROTTLE_MS) return
+        lastPingAtElapsed = now
 
         try {
-            val f = file()
-            f.parentFile?.let { if (!it.exists()) it.mkdirs() }
-            val body = System.currentTimeMillis().toString()
-            f.writeText(if (detail.isNotBlank()) "$body\n$detail" else body)
-            f.setReadable(true, false)
+            systemContext.contentResolver.call(
+                ConfigContentProvider.CONTENT_URI,
+                ConfigContentProvider.METHOD_HEARTBEAT,
+                detail,
+                null
+            )
         } catch (_: Exception) {
             // Best-effort; UI simply keeps showing "not detected" if this never lands.
         }
     }
 
+    /** Called by [ConfigContentProvider.call] inside the app process — plain private prefs. */
+    fun recordPing(appContext: Context, detail: String) {
+        try {
+            appContext
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putLong(KEY_LAST_SEEN_MS, System.currentTimeMillis())
+                .putString(KEY_LAST_DETAIL, detail)
+                .apply()
+        } catch (_: Exception) {
+            // Best-effort.
+        }
+    }
+
     /** Call from the app UI process. */
-    fun isRecentlyActive(): Boolean {
-        val ago = lastSeenMillisAgo() ?: return false
+    fun isRecentlyActive(context: Context): Boolean {
+        val ago = lastSeenMillisAgo(context) ?: return false
         return ago < FRESHNESS_WINDOW_MS
     }
 
     /** Milliseconds since the last heartbeat, or null if none has ever been recorded. */
-    fun lastSeenMillisAgo(): Long? {
+    fun lastSeenMillisAgo(context: Context): Long? {
         return try {
-            val f = file()
-            if (!f.exists()) return null
-            val ts = f.readText().lineSequence().firstOrNull()?.trim()?.toLongOrNull() ?: return null
-            (System.currentTimeMillis() - ts).coerceAtLeast(0)
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val ts = prefs.getLong(KEY_LAST_SEEN_MS, 0L)
+            if (ts <= 0L) null else (System.currentTimeMillis() - ts).coerceAtLeast(0)
         } catch (_: Exception) {
             null
         }

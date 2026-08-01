@@ -6,17 +6,25 @@ import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
 import android.os.Binder
+import android.os.Bundle
 import android.os.Process
 
 /**
- * Exports module configuration to the system_server process.
+ * Exports module configuration to the system_server process, and receives liveness pings back
+ * from it (see [call] / [HookHeartbeat]).
  *
  * Modern Android SELinux blocks system_server from reading another app's private
  * [android.content.SharedPreferences] / data dirs. Legacy [de.robv.android.xposed.XSharedPreferences]
- * also often fails under libxposed API 101. A ContentProvider query from the system UID works
- * because the framework starts this app process and reads prefs with the app's own identity.
+ * also often fails under libxposed API 101+. A ContentProvider query from the system UID works
+ * because the framework starts this app process and reads prefs with the app's own identity —
+ * this is a normal Binder call, not a raw filesystem access, so it isn't subject to external
+ * storage / SELinux write restrictions the way a system_server file write would be.
  *
- * Only the system UID (and this app) may query; other callers are rejected.
+ * [call] reuses that same proven channel for the opposite direction: system_server pings this
+ * provider to prove a hook fired, and the app process (which hosts this provider) records that
+ * itself, entirely inside its own sandbox — no cross-UID filesystem write required.
+ *
+ * Only the system UID (and this app) may query/call; other callers are rejected.
  */
 class ConfigContentProvider : ContentProvider() {
 
@@ -49,6 +57,18 @@ class ConfigContentProvider : ContentProvider() {
     return cursor
   }
 
+  override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
+    if (method == METHOD_HEARTBEAT) {
+      enforceSystemOrSelf()
+      val ctx = context
+      if (ctx != null) {
+        HookHeartbeat.recordPing(ctx, arg.orEmpty())
+      }
+      return Bundle.EMPTY
+    }
+    return super.call(method, arg, extras)
+  }
+
   override fun getType(uri: Uri): String = "vnd.android.cursor.item/vnd.$AUTHORITY.config"
 
   override fun insert(uri: Uri, values: ContentValues?): Uri? = null
@@ -72,6 +92,7 @@ class ConfigContentProvider : ContentProvider() {
   companion object {
     const val AUTHORITY = "com.rhencloud.sleepyxposed.config"
     val CONTENT_URI: Uri = Uri.parse("content://$AUTHORITY/config")
+    const val METHOD_HEARTBEAT = "heartbeat"
 
     val COLUMNS =
             arrayOf(

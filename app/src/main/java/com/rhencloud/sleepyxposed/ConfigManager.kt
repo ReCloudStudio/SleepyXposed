@@ -224,12 +224,6 @@ object ConfigManager {
     return getPrimaryPublicConfigFile().absolutePath
   }
 
-  /** Directory shared with [HookHeartbeat] — the one location both sides are known to reach. */
-  fun getPrimaryPublicDir(): File {
-    return getPrimaryPublicConfigFile().parentFile
-            ?: File("/storage/emulated/0/Android/media/$MODULE_PACKAGE_NAME/$FALLBACK_DIR")
-  }
-
   private fun configToJson(config: SleepyConfig): String {
     return JSONObject()
             .apply {

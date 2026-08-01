@@ -90,7 +90,7 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
     private fun poll() {
         // Throttled internally — proves the media hook side is alive regardless of whether
         // media reporting itself is enabled/configured below.
-        HookHeartbeat.touch()
+        HookHeartbeat.ping(systemContext)
 
         val config = ConfigManager.loadConfigFromXSharedPreferences(systemContext)
         if (!config.enabled) {

@@ -8,7 +8,7 @@ import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
 import java.io.IOException
 import java.lang.reflect.Method
 import okhttp3.Call
@@ -20,7 +20,12 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
     companion object {
         private const val TAG = "SleepyXposed"
         private const val REPORT_DELAY_MS = 1000L
-        private const val MATCH_ANY_USER_FLAG = 0x00002000
+        // PackageManager.MATCH_ANY_USER. Was 0x00002000 (actually MATCH_UNINSTALLED_PACKAGES),
+        // which silently broke app-label lookups for packages running under a different
+        // Android user (work profile / multi-user devices) on API 33+: getApplicationInfo()
+        // would throw NameNotFoundException and getAppDisplayName() would fall back to the
+        // raw package name instead of the human-readable label.
+        private const val MATCH_ANY_USER_FLAG = 0x00400000
         private const val LOCK_REPORT_COOLDOWN_MS = 1_000L
         private const val ACTION_LOG_PREFIX = "LockReceiver action="
 
@@ -74,6 +79,7 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
     )
 
     private var handler: Handler? = null
+    private var workerThread: HandlerThread? = null
     private var reportRunnable: Runnable? = null
     private var systemContext: Context? = null
 
@@ -100,14 +106,28 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
 
             log("$TAG: System context obtained: $systemContext")
             if (systemContext != null) {
-                val looper = systemContext?.mainLooper ?: Looper.myLooper() ?: Looper.getMainLooper()
-                handler = Handler(looper)
-                loadConfiguration()
-                registerLockScreenReceiver()
-                // Prove the hook is alive as soon as bootstrap succeeds, even before the first
-                // foreground-app switch happens. Framework name/version rides along on every
-                // ping too (see HookHeartbeat.ping), so it gets the same automatic retry.
-                HookHeartbeat.ping(systemContext, "bootstrap")
+                // Dedicated worker thread — deliberately NOT systemContext.mainLooper.
+                // completeResumeLocked (hooked below) runs with ActivityTaskManagerService's
+                // global WindowManagerGlobalLock held, and that lock gates virtually all
+                // window/input/activity-lifecycle processing. Anything that can block —
+                // Binder IPC to our app's ConfigContentProvider (which can even trigger a
+                // synchronous cold start of a frozen/killed app process), or file I/O — must
+                // never run synchronously inside the hook, and must never be posted to the
+                // real system_server main Looper either. Everything of that kind is
+                // dispatched to this thread instead, so a slow/frozen app process can only
+                // ever stall our own worker thread, never the WM lock or the UI/input path
+                // (a stall of either is what triggers the Watchdog and forces a full reboot).
+                workerThread = HandlerThread("$TAG-worker").also { it.start() }
+                handler = Handler(workerThread!!.looper)
+                handler?.post {
+                    loadConfiguration()
+                    registerLockScreenReceiver()
+                    // Prove the hook is alive as soon as bootstrap succeeds, even before the
+                    // first foreground-app switch happens. Framework name/version rides along
+                    // on every ping too (see HookHeartbeat.ping), so it gets the same
+                    // automatic retry.
+                    HookHeartbeat.ping(systemContext, "bootstrap")
+                }
             }
         } catch (e: Exception) {
             log("$TAG: Failed to get system context: ${e.message}")
@@ -129,6 +149,8 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
                 // packageName is enough to report; activity name is best-effort only.
                 // Legacy XposedHelpers.getObjectField walked superclasses; plain
                 // getDeclaredField does not (ActivityInfo.name lives on ComponentInfo).
+                // Both reads are plain in-memory field access — no IPC, no I/O — so they're
+                // safe to do synchronously here, still under the WindowManagerGlobalLock.
                 val packageName = getFieldOrNull(activityRecord, "packageName") as? String
                 if (packageName.isNullOrBlank()) {
                     return@intercept result
@@ -143,18 +165,32 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
 
                 currentForegroundPackage = packageName
                 currentForegroundActivity = activityName
-                // Throttled internally — cheap to call on every switch.
-                HookHeartbeat.ping(systemContext, packageName)
 
-                if (packageName != lastForegroundPackage) {
-                    lastForegroundPackage = packageName
-                    val appName =
-                        systemContext?.let { getAppDisplayName(it, packageName) } ?: packageName
-                    val componentName =
-                        if (activityName != null) "$packageName/$activityName/$appName"
-                        else packageName
-                    log("$TAG: Foreground app switched to: $componentName")
-                    executeCustomOperations(packageName)
+                // Everything from here on can block — HookHeartbeat.ping() and
+                // getAppDisplayName()/executeCustomOperations() may reach across processes to
+                // our own app (Binder IPC, possibly a synchronous cold start if that process
+                // is frozen or was killed) or hit disk. None of it may run on this thread
+                // while the WindowManagerGlobalLock is held, so hand it off to the worker
+                // thread and return immediately.
+                val handlerInstance = handler
+                if (handlerInstance == null) {
+                    log("$TAG: Handler not initialized, skipping post-resume work")
+                    return@intercept result
+                }
+                handlerInstance.post {
+                    // Throttled internally — cheap to call on every switch.
+                    HookHeartbeat.ping(systemContext, packageName)
+
+                    if (packageName != lastForegroundPackage) {
+                        lastForegroundPackage = packageName
+                        val appName =
+                            systemContext?.let { getAppDisplayName(it, packageName) } ?: packageName
+                        val componentName =
+                            if (activityName != null) "$packageName/$activityName/$appName"
+                            else packageName
+                        log("$TAG: Foreground app switched to: $componentName")
+                        executeCustomOperations(packageName)
+                    }
                 }
             } catch (e: Throwable) {
                 log("$TAG: Error in hook: ${e.message}")
@@ -327,9 +363,13 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
                 }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                ctx.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+                // Explicit `handler` (our worker thread) so onReceive itself never runs on
+                // system_server's default main thread either — same reasoning as the
+                // completeResumeLocked hook above, just cheaper insurance here since
+                // onReceive's own work is already trivial.
+                ctx.registerReceiver(receiver, filter, null, handler, Context.RECEIVER_EXPORTED)
             } else {
-                ctx.registerReceiver(receiver, filter)
+                ctx.registerReceiver(receiver, filter, null, handler)
             }
 
             lockReceiverRegistered = true

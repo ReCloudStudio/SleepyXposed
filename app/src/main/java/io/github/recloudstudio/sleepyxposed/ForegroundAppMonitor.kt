@@ -202,6 +202,16 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
     }
 
     /**
+     * Cache of resolved [java.lang.reflect.Field]s, keyed by "ClassName#fieldName". Populated
+     * lazily by [getFieldOrNull]. `completeResumeLocked` fires on every activity resume
+     * system-wide — a genuinely hot path — so re-doing [Class.getDeclaredField] (a linear scan)
+     * plus [java.lang.reflect.Field.setAccessible] (a security check) on every single call would
+     * be wasted CPU: the resolved Field for a given (class, name) pair never changes for the
+     * process's lifetime, so it only needs to be looked up once.
+     */
+    private val fieldCache = java.util.concurrent.ConcurrentHashMap<String, java.lang.reflect.Field?>()
+
+    /**
      * Read an instance field by name, walking the superclass chain.
      *
      * Equivalent of legacy [de.robv.android.xposed.XposedHelpers.getObjectField]:
@@ -210,17 +220,27 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
      * would otherwise throw NoSuchFieldException.
      */
     private fun getFieldOrNull(target: Any, name: String): Any? {
-        var clazz: Class<*>? = target.javaClass
-        while (clazz != null) {
-            try {
-                val field = clazz.getDeclaredField(name)
-                field.isAccessible = true
-                return field.get(target)
-            } catch (_: NoSuchFieldException) {
-                clazz = clazz.superclass
+        val targetClass = target.javaClass
+        val cacheKey = "${targetClass.name}#$name"
+        // computeIfAbsent caches misses too (a null value), so a field that's genuinely absent
+        // only ever walks the superclass chain once rather than on every hook invocation.
+        val field =
+            fieldCache.computeIfAbsent(cacheKey) {
+                var clazz: Class<*>? = targetClass
+                var resolved: java.lang.reflect.Field? = null
+                while (clazz != null) {
+                    resolved =
+                        try {
+                            clazz.getDeclaredField(name).also { it.isAccessible = true }
+                        } catch (_: NoSuchFieldException) {
+                            null
+                        }
+                    if (resolved != null) break
+                    clazz = clazz.superclass
+                }
+                resolved
             }
-        }
-        return null
+        return field?.get(target)
     }
 
     private fun loadConfiguration() {

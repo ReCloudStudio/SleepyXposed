@@ -209,7 +209,8 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
      * be wasted CPU: the resolved Field for a given (class, name) pair never changes for the
      * process's lifetime, so it only needs to be looked up once.
      */
-    private val fieldCache = java.util.concurrent.ConcurrentHashMap<String, java.lang.reflect.Field?>()
+    private val fieldCache = java.util.concurrent.ConcurrentHashMap<String, Any>()
+    private val ABSENT = Any()
 
     /**
      * Read an instance field by name, walking the superclass chain.
@@ -222,25 +223,23 @@ class ForegroundAppMonitor(private val log: (String) -> Unit) {
     private fun getFieldOrNull(target: Any, name: String): Any? {
         val targetClass = target.javaClass
         val cacheKey = "${targetClass.name}#$name"
-        // computeIfAbsent caches misses too (a null value), so a field that's genuinely absent
-        // only ever walks the superclass chain once rather than on every hook invocation.
-        val field =
-            fieldCache.computeIfAbsent(cacheKey) {
-                var clazz: Class<*>? = targetClass
-                var resolved: java.lang.reflect.Field? = null
-                while (clazz != null) {
-                    resolved =
-                        try {
-                            clazz.getDeclaredField(name).also { it.isAccessible = true }
-                        } catch (_: NoSuchFieldException) {
-                            null
-                        }
-                    if (resolved != null) break
-                    clazz = clazz.superclass
-                }
-                resolved
+        val cached = fieldCache.computeIfAbsent(cacheKey) {
+            var clazz: Class<*>? = targetClass
+            var resolved: java.lang.reflect.Field? = null
+            while (clazz != null) {
+                resolved =
+                    try {
+                        clazz.getDeclaredField(name).also { it.isAccessible = true }
+                    } catch (_: NoSuchFieldException) {
+                        null
+                    }
+                if (resolved != null) break
+                clazz = clazz.superclass
             }
-        return field?.get(target)
+            resolved ?: ABSENT
+        }
+        if (cached === ABSENT) return null
+        return (cached as java.lang.reflect.Field).get(target)
     }
 
     private fun loadConfiguration() {

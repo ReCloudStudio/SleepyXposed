@@ -36,6 +36,7 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
         private const val TAG = "SleepyXposed-Media"
         private const val POLL_INTERVAL_MS = 8_000L
         private const val DUMPSYS_TIMEOUT_SECONDS = 5L
+        private const val DUMPSYS_MAX_OUTPUT_BYTES = 256 * 1024
         private val DUMPSYS_DESCRIPTION_REGEX = Regex("description=([^,]+),\\s*([^,]+)")
         private const val NOT_PLAYING_STATUS = "未在播放"
     }
@@ -226,10 +227,20 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
                         try {
                             BufferedReader(InputStreamReader(reader)).use { br ->
                                 val buf = CharArray(4096)
+                                var totalRead = 0
                                 while (true) {
                                     val n = br.read(buf)
                                     if (n < 0) break
-                                    outputRef.append(buf, 0, n)
+                                    if (totalRead + n <= DUMPSYS_MAX_OUTPUT_BYTES) {
+                                        outputRef.append(buf, 0, n)
+                                        totalRead += n
+                                    } else {
+                                        val remaining = DUMPSYS_MAX_OUTPUT_BYTES - totalRead
+                                        if (remaining > 0) {
+                                            outputRef.append(buf, 0, remaining)
+                                        }
+                                        break
+                                    }
                                 }
                             }
                         } catch (_: IOException) {
@@ -243,9 +254,17 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
             if (!process.waitFor(DUMPSYS_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 log("$TAG: dumpsys media_session timed out")
                 readerThread.join(200)
+                if (readerThread.isAlive) {
+                    log("$TAG: dumpsys reader thread still alive after timeout, returning null")
+                    return null
+                }
                 return null
             }
             readerThread.join(TimeUnit.SECONDS.toMillis(DUMPSYS_TIMEOUT_SECONDS))
+            if (readerThread.isAlive) {
+                log("$TAG: dumpsys reader thread still alive after process exit, returning null")
+                return null
+            }
             val output = outputRef.toString()
 
             // dumpsys prints one block per media session; the first description= in the whole

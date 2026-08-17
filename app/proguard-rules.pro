@@ -5,6 +5,13 @@
 -keep class io.github.recloudstudio.sleepyxposed.ModuleMain { *; }
 -keep class * extends io.github.libxposed.api.XposedModule { *; }
 
+# Legacy Xposed entry point: discovered by class name from assets/xposed_init at runtime,
+# the same way ModuleMain is discovered via java_init.list. Without this rule R8 can strip
+# or rename the class / its no-arg constructor since nothing in our own call graph
+# references it, silently breaking module loading on legacy (non-libxposed) frameworks.
+-keep class io.github.recloudstudio.sleepyxposed.LegacyEntry { *; }
+-keep class * implements de.robv.android.xposed.IXposedHookLoadPackage { *; }
+
 # Components declared in the manifest
 -keep class io.github.recloudstudio.sleepyxposed.MainActivity { *; }
 -keep class io.github.recloudstudio.sleepyxposed.ConfigContentProvider { *; }

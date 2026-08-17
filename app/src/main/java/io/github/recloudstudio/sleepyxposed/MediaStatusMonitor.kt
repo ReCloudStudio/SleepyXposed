@@ -213,13 +213,40 @@ class MediaStatusMonitor(private val log: (String) -> Unit) {
         var process: Process? = null
         return try {
             process = ProcessBuilder("dumpsys", "media_session").redirectErrorStream(true).start()
+
+            // Drain stdout on a separate thread WHILE waiting for exit, not after: dumpsys
+            // output can exceed the OS pipe buffer (a few KB) once several media sessions are
+            // active, and calling waitFor() first (as an earlier version did) would then
+            // deadlock — the child blocks writing to a full pipe nobody is reading, so
+            // waitFor() always hits the timeout and every poll silently fails.
+            val outputRef = StringBuilder()
+            val reader = process.inputStream
+            val readerThread =
+                Thread {
+                        try {
+                            BufferedReader(InputStreamReader(reader)).use { br ->
+                                val buf = CharArray(4096)
+                                while (true) {
+                                    val n = br.read(buf)
+                                    if (n < 0) break
+                                    outputRef.append(buf, 0, n)
+                                }
+                            }
+                        } catch (_: IOException) {
+                            // Stream closed because we destroyed the process on timeout; ignore.
+                        }
+                    }
+                    .also { it.isDaemon = true; it.start() }
+
             // Bounded wait so a hung dumpsys can never block the (system_server) caller; the
             // process is destroyed in the finally block on the way out.
             if (!process.waitFor(DUMPSYS_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 log("$TAG: dumpsys media_session timed out")
+                readerThread.join(200)
                 return null
             }
-            val output = BufferedReader(InputStreamReader(process.inputStream)).use { it.readText() }
+            readerThread.join(TimeUnit.SECONDS.toMillis(DUMPSYS_TIMEOUT_SECONDS))
+            val output = outputRef.toString()
 
             // dumpsys prints one block per media session; the first description= in the whole
             // dump may belong to a paused session. Select only the block that is actually

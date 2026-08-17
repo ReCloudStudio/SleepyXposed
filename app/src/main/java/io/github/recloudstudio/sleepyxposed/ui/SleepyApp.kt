@@ -54,7 +54,12 @@ fun SleepyApp() {
 
     fun refresh() {
         scope.launch {
-            snapshot = withContext(Dispatchers.Default) { StatusSnapshot.collect(context) }
+            // StatusSnapshot.collect() is blocking I/O (SharedPreferences/file reads,
+            // PackageManager + Settings.Secure binder calls), not CPU-bound work, so it
+            // belongs on Dispatchers.IO — matching how the rest of the app (ConfigScreen)
+            // already offloads the same kind of work. Dispatchers.Default is sized for
+            // CPU-bound work and shouldn't be used for blocking calls.
+            snapshot = withContext(Dispatchers.IO) { StatusSnapshot.collect(context) }
         }
     }
 
